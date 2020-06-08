@@ -1,0 +1,9 @@
+name: cmda-notebooks
+channels:
+  - conda-forge
+dependencies:
+  - xarray
+  - matplotlib-base
+  - cartopy
+  - hvplot
+  - requests
