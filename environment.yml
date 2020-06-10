@@ -7,3 +7,4 @@ dependencies:
   - cartopy
   - hvplot
   - requests
+  - geoviews
