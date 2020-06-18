@@ -63,4 +63,4 @@ ds.clt.hvplot.quadmesh('lon', 'lat', widget_location='bottom', projection=ccrs.P
 ```
 ![](figures/bokeh.png)
 
-The Jupyter notebooks contain interactive plots
+The Jupyter notebooks contain interactive plots with [bokeh](https://docs.bokeh.org/en/latest/)
