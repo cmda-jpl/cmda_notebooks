@@ -1,0 +1,62 @@
+short_name,long_name,group_name,dimensions,units
+cct,Cloud Top Pressure,,2,Pa
+cl,Cloud Area Fraction,,3,%
+cli,Cloud Ice Water Content,,3,1
+clt,Total Cloud Fraction,,2,%
+cltcalipso,CALIPSO Total Cloud Fraction,,2,%
+cltisccp,ISCCP Total Cloud Fraction (daytime only),,2,%
+cltday,Daytime Total Cloud Area Fraction,,2,1
+cltiday,Daytime Total Ice Cloud Area Fraction,,2,1
+cltlday,Daytime Total Liquid Cloud Area Fraction,,2,1
+clw,Cloud Liquid Water Content,,3,1
+ctpday,Daytime Cloud Top Pressure,,2,hPa
+cttday,Daytime Cloud Top Temperature,,2,K
+gz,Geopotential,,3,m**2 s**-2
+hur,Relative Humidity,,3,%
+hurs,Near-Surface Relative Humidity,,2,%
+hus,Specific Humidity,,3,1
+lai,Leaf Area Index,,2,1
+lst_day,Daytime Land Surface Temperature,,2,K
+lst_night,Nighttime Land Surface Temperature,,2,K
+mrso1,Soil Moisture Content from Surface to 10 cm Deep,,2,kg m-2
+mrso2,Soil Moisture Content from 10 cm to 160 cm Deep,,2,kg m-2
+mrso3,Soil Moisture Content from 160 cm to 190 cm Deep,,2,kg m-2
+od550aer,Ambient Aerosol Optical Thickness at 550 nm,,2,1
+ohc2000,Ocean Heat Content Anomaly within 2000 m Depth,,2,1e18 joules
+ohc700,Ocean Heat Content Anomaly within 700 m Depth,,2,1e18 joules
+os,Ocean Salinity,ocean,3,psu
+ot,Ocean Temperature,ocean,3,K
+pr,Precipitation Flux,,2,kg m-2 s-1
+prw,Water Vapor Path,,2,kg m-2
+reflciday,Daytime Cirrus Reflectance,,2,1
+rlds,Surface Downwelling Longwave Radiation,,2,W m-2
+rldscs,Surface Downwelling Clear-Sky Longwave Radiation,,2,W m-2
+rlus,Surface Upwelling Longwave Radiation,,2,W m-2
+rlut,TOA Outgoing Longwave Radiation,,2,W m-2
+rlutcs,TOA Outgoing Clear-Sky Longwave Radiation,,2,W m-2
+rsds,Surface Downwelling Shortwave Radiation,,2,W m-2
+rsdscs,Surface Downwelling Clear-Sky Shortwave Radiation,,2,W m-2
+rsdt,TOA Incident Shortwave Radiation,,2,W m-2
+rsus,Surface Upwelling Shortwave Radiation,,2,W m-2
+rsuscs,Surface Upwelling Clear-Sky Shortwave Radiation,,2,W m-2
+rsut,TOA Outgoing Shortwave Radiation,,2,W m-2
+rsutcs,TOA Outgoing Clear-Sky Shortwave Radiation,,2,W m-2
+sfcWind,Near-Surface Wind Speed,,2,m s-1
+ta,Air Temperature,,3,K
+tas,Near-Surface Air Temperature,,2,K
+taucday,Daytime Ice/Liquid Combined Cloud Optical Thickness,,2,1
+tauiday,Daytime Ice Cloud Optical Thickness,,2,1
+taulday,Daytime Liquid Cloud Optical Thickness,,2,1
+th,Potential Temperature,,3,K
+tos,Sea Surface Temperature,,2,K
+ts,Surface Temperature,,2,K
+ua,Eastward Wind,,3,m s-1
+uas,Eastward Near-Surface Wind,,2,m s-1
+va,Northward Wind,,3,m s-1
+vas,Northward Near-Surface Wind,,2,m s-1
+w,Vertical Wind Velocity,,3,m s-1
+wap,Vertical Wind Velocity in Pressure,,3,Pa s-1
+zg,Geopotential Height,,3,m
+zl,Equivalent Water Height Over Land,,2,cm
+zo,Equivalent Water Height Over Ocean,,2,cm
+zos,Sea Surface Height,,2,m
