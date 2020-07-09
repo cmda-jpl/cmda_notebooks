@@ -34,7 +34,7 @@ The `query` accessor defines how the values stored in the GUI elements get mappe
 The `Service` base class handles most of these, but you will likely need to override this to set additonal parameters specific to the service: 
 
 Example:
-```
+```python
     @property
     def query(self):
         query = dict(**super().query)
