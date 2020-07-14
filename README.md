@@ -6,7 +6,8 @@ The [CMDA services](http://ec2-52-53-95-229.us-west-1.compute.amazonaws.com:8080
 ## Getting Started
 ### 1. Choose a service from the [web API](http://ec2-52-53-95-229.us-west-1.compute.amazonaws.com:8080/)
 
-### 2. Build a query. This can be done via the web interface: 
+### 2. Build a query. 
+This can be done via the web interface: 
 
 ![](figures/timeseries_query.png)
 
