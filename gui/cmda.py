@@ -332,6 +332,7 @@ class RandomForestService(Service):
         query['nVar'] = self.nvars
         return query
 
+
 class EOFService(Service):
     selector_names = ['Data']
     nvars = param.Integer(1, precedence=-1)
@@ -344,17 +345,39 @@ class EOFService(Service):
         
     @property
     def figure(self):
-        f1 = self.ds.patterns.hvplot.quadmesh('lon', 'lat', title='EOF',
+        f1 = self.ds.varP.hvplot.line(x='EOF', y='varP',
+                                      title='Variance Explained (%)')
+        f2 = self.ds.patterns.hvplot.quadmesh('lon', 'lat', title='EOF',
                                           widget_location='bottom',
                                           projection=ccrs.PlateCarree(),
                                           crs=ccrs.PlateCarree(), geo=True,
                                           coastline=True)
-        f2 = self.ds.tser.hvplot.line(x='time', y='tser', title='PC',
+        f3 = self.ds.tser.hvplot.line(x='time', y='tser', title='PC',
                                       widget_location='bottom')
-        return pn.Column(f1, f2)
+        return pn.Column(f1, f2, f3)
 
     @property
     def query(self):
         query = dict(**super().query)
         query['anomaly'] = int(self.anomaly)
+        return query
+
+class CorrelationMapService(Service):
+    selector_names = ['Variable 1', 'Variable 2']
+    nvars = param.Integer(2, precedence=-1)
+    lag = param.Integer(0, label='Time Lag in Months')
+    endpoint = '/svc/correlationMap'
+            
+    @property
+    def figure(self):
+        return self.ds.corr.hvplot.quadmesh('lon', 'lat',
+                                            projection=ccrs.PlateCarree(),
+                                            crs=ccrs.PlateCarree(), geo=True,
+                                            coastline=True, width=1000,
+                                            height=500)
+
+    @property
+    def query(self):
+        query = dict(**super().query)
+        query['laggedTime'] = int(self.lag)
         return query
