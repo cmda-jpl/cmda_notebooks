@@ -45,7 +45,7 @@ print(r.status_code)
 
 ### 3. Download the data
 
-Click "Download Data" on the web api to download a [Net CDF](https://en.wikipedia.org/wiki/NetCDF) file containing the data. 
+After a query is built, click "Download Data" on the web api to download a [Net CDF](https://en.wikipedia.org/wiki/NetCDF) file containing the data. 
 
 Or use python to download the Data File URL directly into code:
 
@@ -62,7 +62,7 @@ data_url = r.json()['dataUrl'] # Data File URL
 ds = download_data(data_url)
 ```
 
-The Net CDF file will be downloaded directly into an Xarray [DataSet Object](http://xarray.pydata.org/en/stable/generated/xarray.Dataset.html). In a Jupyter notebook the dataset object can be explored interactively. From here the data is ready for analysis
+The Net CDF file will be downloaded directly into an [Xarray DataSet Object](http://xarray.pydata.org/en/stable/generated/xarray.Dataset.html). In a Jupyter notebook the dataset object can be explored interactively. From here the data is ready for analysis
 
 ![](figures/xarray.png)
 
