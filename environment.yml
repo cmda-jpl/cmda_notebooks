@@ -1,7 +1,6 @@
 name: cmda-notebooks
 channels:
   - pyviz
-  - conda-forge
 dependencies:
   - python=3.7
   - xarray
