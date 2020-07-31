@@ -254,7 +254,7 @@ class TimeSeriesService(Service):
     latlon_suf = False
     
     def _postprocess_data(self, ds):
-        datasets = [selector.dataset for selector in self.dataset_selectors]
+        datasets = [self.v(i) for i in range(1, self.nvars+1)]
         times = gen_time_range(self.subsetter.start_time, self.subsetter.end_time)
         ds = (ds.rename(varIdx='Dataset', monthIdx='time')
                  .assign_coords(Dataset=datasets, time=times))
@@ -263,8 +263,19 @@ class TimeSeriesService(Service):
         
     @property
     def figure(self):
+        ds = self.ds.copy()
         y = self.query['var1']
-        return self.ds.hvplot.line(x='time', y=y, by='Dataset', width=1000, height=500)
+        if self.nvars > 1:
+            for i in range(2, self.nvars+1):
+                if self.query[f'var{i}'] != y:
+                    ds[y] = ((ds[y] - ds[y].min('time')) / 
+                             (ds[y].max('time') - ds[y].min('time')))
+                    ds[y].attrs['units'] = '0-1'
+                    ds = ds.rename({y: 'Normalized Variable'})
+                    y = 'Normalized Variable'
+                    break
+        return ds.hvplot.line(x='time', y=y, by='Dataset', 
+                              legend='bottom', width=1000, height=500)
     
     @property
     def query(self):
@@ -539,11 +550,15 @@ class AnomalyService(Service):
     @property
     def figure(self):
         v = self.query['var1']
-        return self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
-                                       geo=True, projection=ccrs.PlateCarree(),
-                                       crs=ccrs.PlateCarree(), coastline=True,
-                                       width=800, height=400, rasterize=True,
-                                       widget_location='bottom')
+        area_mean = self.ds.weighted(np.cos(np.deg2rad(self.ds.lat))).mean(('lon', 'lat'))
+        f1 = area_mean.hvplot.line(x='time', y=v, width=800, height=400, legend='bottom')
+        f2 = self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
+                                     geo=True, projection=ccrs.PlateCarree(),
+                                     crs=ccrs.PlateCarree(), coastline=True,
+                                     width=800, height=400, rasterize=True,
+                                     widget_location='bottom')
+        return pn.Column(f1, f2)
+    
     @property
     def query(self):
         query = dict(**super().query)
