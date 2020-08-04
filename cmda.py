@@ -18,6 +18,7 @@ variables = pd.read_csv('variables.csv')
 names = datasets.dataset_name
 categories = datasets.category.unique()
 dset_dict = {cat: list(names[datasets.category == cat].unique()) for cat in categories}
+seasons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 def get_variables(dataset_name):
     return datasets.long_name[names == dataset_name].dropna().unique()
@@ -32,10 +33,14 @@ class SpatialSubsetter(param.Parameterized):
     latitude_range = param.Range(default=(-90, 90), bounds=(-90, 90))
     longitude_range = param.Range(default=(0, 360), bounds=(0, 360))
     
+    def __init__(self, service=None, **params):
+        param.Parameterized.__init__(self, **params)
+    
 class TemporalSubsetter(param.Parameterized):
     start_time = param.String('')
     end_time = param.String('')
-    def __init__(self, service, **params):
+    
+    def __init__(self, service=None, **params):
         self.service = service
         self._update_time_ranges()
         super().__init__(**params)
@@ -49,12 +54,20 @@ class TemporalSubsetter(param.Parameterized):
         
     @property
     def time_range(self):
-        start_times = [selector.attrs['start'] for selector in self.service.all_selectors]
-        end_times = [selector.attrs['end'] for selector in self.service.all_selectors]
+        if hasattr(self.service, 'all_selectors'):
+            selectors = self.service.all_selectors
+        else:
+            selectors = [self]
+        start_times = [selector.attrs['start'] for selector in selectors]
+        end_times = [selector.attrs['end'] for selector in selectors]
         st, et = str(max(start_times)), str(min(end_times))
         return f'{st[:4]}-{st[4:]}', f'{et[:4]}-{et[4:]}'
 
-class Subsetter(SpatialSubsetter, TemporalSubsetter):
+
+class SeasonalSubsetter(TemporalSubsetter):
+    months = param.ListSelector(default=seasons, objects=seasons)
+
+class Subsetter(TemporalSubsetter, SpatialSubsetter):
     pass
 
 class DatasetSelector(param.Parameterized):
@@ -80,7 +93,10 @@ class DatasetSelector(param.Parameterized):
 
     @param.depends('category', 'dataset', 'variable', watch=True)
     def _update_subsetter(self):
-        self.service.subsetter._update_time_ranges()
+        if hasattr(self, 'time_range'):
+            self._update_time_ranges()
+        else:
+            self.service.subsetter._update_time_ranges()
         if hasattr(self.service, 'start_time2'):
             self.service._update_ref_time_range()
         
@@ -97,7 +113,7 @@ class DatasetSelector(param.Parameterized):
     def attrs(self):
         return get_attrs(self.dataset, self.variable)
 
-class DatasetSubsetSelector(SpatialSubsetter, DatasetSelector):
+class DatasetSubsetSelector(DatasetSelector, SpatialSubsetter):
     pass
 
 class DatasetAnomalySelector(DatasetSubsetSelector):
@@ -106,32 +122,33 @@ class DatasetAnomalySelector(DatasetSubsetSelector):
 class DatasetBinsSelector(DatasetSelector):
     nbins = param.Integer(10, label='Number of Bins')
 
+class DatasetMonthSelector(DatasetSelector, SeasonalSubsetter):
+    pass
+
 class Service(param.Parameterized):
     selector_names = None
     selector_cls = DatasetSelector
+    subsetter_cls = Subsetter
     latlon_prefix = ''
     latlon_suf = True
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
-    host = 'http://ec2-52-53-95-229.us-west-1.compute.amazonaws.com:8080'
+    host = 'http://api.jpl-cmda.org:8080'
     endpoint = '/'
     
     def __init__(self, **params):
-        self.target_selector = self.selector_cls(self, name='Target Variable')
-        if issubclass(self.selector_cls, SpatialSubsetter):
-            subsetter_cls = TemporalSubsetter
-        else:
-            subsetter_cls = Subsetter
+        svc = None if issubclass(self.selector_cls, TemporalSubsetter) else self
+        self.target_selector = self.selector_cls(svc, name='Target Variable')
         if not self.selector_names:
-            self.dataset_selectors = [self.selector_cls(self, name='Dataset 1')]
+            self.dataset_selectors = [self.selector_cls(svc, name='Dataset 1')]
         else:
             self.param['nvars'].precedence = -1
             self.dataset_selectors = [
-                self.selector_cls(self, name=self.selector_names[i])
+                self.selector_cls(svc, name=self.selector_names[i])
                 for i in range(self.nvars)
             ]
-        self.subsetter = subsetter_cls(self, name='Subsetting Options')
+        self.subsetter = self.subsetter_cls(svc, name='Subsetting Options')
         self.purpose = pn.widgets.TextAreaInput(name='Execution Purpose',
                                                 placeholder='Describe execution purpose here (Optional)')
         def press(event):
@@ -142,12 +159,14 @@ class Service(param.Parameterized):
     
     @param.depends('nvars', watch=True)
     def _update_datasets(self):
+        svc = None if issubclass(self.selector_cls, TemporalSubsetter) else self
         while len(self.dataset_selectors) > self.nvars:
             self.dataset_selectors.pop(-1)
         for i in range(len(self.dataset_selectors), self.nvars):
             name = self.selector_names[i] if self.selector_names else f'Dataset {i+1}'
-            self.dataset_selectors.append(self.selector_cls(self, name=name))
-        self.subsetter._update_time_ranges()
+            self.dataset_selectors.append(self.selector_cls(svc, name=name))
+        if hasattr(self.subsetter, 'time_range'):
+            self.subsetter._update_time_ranges()
             
     @param.depends('nvars')
     def select_dataset(self):
@@ -249,6 +268,7 @@ class Service(param.Parameterized):
 
 class TimeSeriesService(Service):
     selector_cls = DatasetSubsetSelector
+    subsetter_cls = TemporalSubsetter
     endpoint = '/svc/timeSeries'
     latlon_prefix = 'v'
     latlon_suf = False
@@ -573,6 +593,9 @@ class AnomalyService(Service):
                 query[f'{k}2'] = query[f'{k}1']
         return query
 
+class Test(Service):
+    selector_cls = DatasetMonthSelector
+    subsetter_cls = SpatialSubsetter
 
 class ServiceViewer:
     def __init__(self):
@@ -586,6 +609,7 @@ class ServiceViewer:
             eof=EOFService(name='EOF'),
             joint_eof=JointEOFService(name='Joint EOF'),
             pdf=ConditionalPDFService(name='Conditional PDF'),
+            test=Test(name='Test')
         )
     
     def __getattr__(self, attr):
@@ -597,3 +621,4 @@ class ServiceViewer:
     @property
     def service_names(self):
         return list(self.svc.keys())
+    
