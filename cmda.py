@@ -67,7 +67,10 @@ class TemporalSubsetter(param.Parameterized):
 class SeasonalSubsetter(TemporalSubsetter):
     months = param.ListSelector(default=seasons, objects=seasons)
 
-class Subsetter(TemporalSubsetter, SpatialSubsetter):
+class SpatialTemporalSubsetter(TemporalSubsetter, SpatialSubsetter):
+    pass
+
+class SpatialSeasonalSubsetter(SeasonalSubsetter, SpatialSubsetter):
     pass
 
 class DatasetSelector(param.Parameterized):
@@ -75,7 +78,7 @@ class DatasetSelector(param.Parameterized):
     category = param.ObjectSelector(objects=list(dset_dict.keys()))
     dataset = param.ObjectSelector(default='GFDL/ESM2G', objects=dset_dict['Model: Historical'])
     variable = param.ObjectSelector(default=defaults[0], objects=defaults)
-    pressure = param.String('N/A', constant=True)
+    pressure = param.Integer(-999999, precedence=-1)
     
     def __init__(self, service, **params):
         self.service = service
@@ -103,11 +106,11 @@ class DatasetSelector(param.Parameterized):
     @param.depends('variable', watch=True)
     def _update_pressure(self):
         if self.attrs['dimensions'] > 2:
-            self.param['pressure'].constant = False
-            self.pressure = '500'
-        elif not self.param['pressure'].constant:
-                self.pressure = 'N/A'
-                self.param['pressure'].constant = True
+            self.pressure = 500
+            self.param['pressure'].precedence = 1
+        else:
+            self.param['pressure'].precedence = -1
+            self.pressure = -999999
     
     @property
     def attrs(self):
@@ -125,10 +128,46 @@ class DatasetBinsSelector(DatasetSelector):
 class DatasetMonthSelector(DatasetSelector, SeasonalSubsetter):
     pass
 
+class DatasetPresRangeSelector(DatasetSelector):
+    pressure = param.Integer(-999999, label='Pressure Min', precedence=-1)
+    pressure_max = param.Integer(-999999, label='Pressure Max', precedence=-1)
+    
+    @param.depends('variable', watch=True)
+    def _update_pressure(self):
+        for p, v in zip(['pressure', 'pressure_max'], [200, 900]):
+            if self.attrs['dimensions'] > 2:
+                setattr(self, p, v)
+                self.param[p].precedence = 1
+            else:
+                self.param[p].precedence = -1
+                setattr(self, p, -999999)
+
+class DatasetSamplingSelector(DatasetSelector):
+    bin_spec = param.ObjectSelector(default='default', objects=['default', 'customized'],
+                                    label='Sampling Variable binning specification')
+    bin_min = param.String('-999999', precedence=-1)
+    bin_max = param.String('-999999', precedence=-1)
+    nbins = param.Integer(-999999, precedence=-1, label='Number of Bins')
+    
+    @param.depends('bin_spec', watch=True)
+    def _update_bins(self):
+        for p in ['bin_min', 'bin_max', 'nbins']:
+            if self.bin_spec == 'customized':
+                v = '' if p in ['bin_min', 'bin_max'] else 0
+                setattr(self, p, v)
+                self.param[p].precedence = 1
+            else:
+                self.param[p].precedence = -1
+                v = '-999999' if p in ['bin_min', 'bin_max'] else -999999
+                setattr(self, p, v)
+        
+    
 class Service(param.Parameterized):
+    target_name = 'Target Variable'
+    target_selector_cls = DatasetSelector
     selector_names = None
     selector_cls = DatasetSelector
-    subsetter_cls = Subsetter
+    subsetter_cls = SpatialTemporalSubsetter
     latlon_prefix = ''
     time_prefix = ''
     month_prefix = ''
@@ -140,8 +179,9 @@ class Service(param.Parameterized):
     endpoint = '/'
     
     def __init__(self, **params):
+        t_svc = None if issubclass(self.target_selector_cls, TemporalSubsetter) else self
         svc = None if issubclass(self.selector_cls, TemporalSubsetter) else self
-        self.target_selector = self.selector_cls(svc, name='Target Variable')
+        self.target_selector = self.target_selector_cls(t_svc, name=self.target_name)
         if not self.selector_names:
             self.dataset_selectors = [self.selector_cls(svc, name='Dataset 1')]
         else:
@@ -270,8 +310,6 @@ class Service(param.Parameterized):
             for k, v in mapper.items():
                 if k == 'model':
                     v = v.replace('/', '_')
-                elif k == 'pres' and v == 'N/A':
-                    v = -999999
                 if self.latlon_suf and k in latlon_basenames:
                     k = k[:-1] + str(i + 1) + k[-1]
                 else:
@@ -309,7 +347,7 @@ class TimeSeriesService(Service):
                     y = 'Normalized Variable'
                     break
         return ds.hvplot.line(x='time', y=y, by='Dataset', 
-                              legend='bottom', width=1000, height=500)
+                              legend='bottom', width=800, height=400)
     
     @property
     def query(self):
@@ -385,9 +423,9 @@ class DifferencePlotService(Service):
 
     
 class RandomForestService(Service):
-    endpoint = '/svc/randomForest'
     nvars = param.Integer(1, bounds=(1, 10), label='Source Variables')
     ntargets = param.Integer(1, bounds=(0, 1), precedence=-1)
+    endpoint = '/svc/randomForest'
     
     def _postprocess_data(self, ds):
         vs = self.v(1)
@@ -605,9 +643,9 @@ class AnomalyService(Service):
             keys = ['model', 'var', 'pres']
             for k in keys:
                 query[f'{k}2'] = query[f'{k}1']
-        return query
-
-class MapViewer(Service):
+        return query    
+    
+class MapView(Service):
     selector_cls = DatasetMonthSelector
     subsetter_cls = SpatialSubsetter
     time_prefix = 'v'
@@ -644,6 +682,18 @@ class MapViewer(Service):
         query['nVar'] = self.nvars - 1
         return query
 
+class ConditionalSamplingBase(Service):
+    target_name = 'Physical (Sampled) Variable'
+    target_selector_cls = DatasetPresRangeSelector
+    selector_cls = DatasetSamplingSelector
+    subsetter_cls = SpatialSeasonalSubsetter
+    nvars = param.Integer(1, bounds=(1, 2), precedence=-1)
+    ntargets = param.Integer(1, bounds=(0, 1), precedence=-1)    
+
+class ConditionalSampling1(ConditionalSamplingBase):
+    selector_names = ['Environmental (Sampling) Variable']
+    endpoint = '/svc/conditionalSampling'
+    
 class ServiceViewer:
     def __init__(self):
         self.svc = dict(
@@ -656,7 +706,8 @@ class ServiceViewer:
             eof=EOFService(name='EOF'),
             joint_eof=JointEOFService(name='Joint EOF'),
             pdf=ConditionalPDFService(name='Conditional PDF'),
-            map_viewer=MapViewer(name='Map Viewer')
+            map_view=MapView(name='Map View'),
+            conditional_sampling1=ConditionalSampling1(name='Conditional Sampling 1 Var')
         )
     
     def __getattr__(self, attr):
