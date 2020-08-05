@@ -265,7 +265,7 @@ class Service(param.Parameterized):
             if 'timeS' not in query:
                 time_range = [t.replace('-', '') for t in selector.time_range]
                 mapper.update(**dict(zip(time_names, time_range)))
-            if 'months' not in query:
+            if 'months' not in query and hasattr(selector, 'months'):
                 mapper[month_name] = [selector.months.index(m) + 1 for m in selector.months]
             for k, v in mapper.items():
                 if k == 'model':
