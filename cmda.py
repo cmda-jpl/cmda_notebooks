@@ -130,6 +130,8 @@ class Service(param.Parameterized):
     selector_cls = DatasetSelector
     subsetter_cls = Subsetter
     latlon_prefix = ''
+    time_prefix = ''
+    month_prefix = ''
     latlon_suf = True
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
@@ -237,22 +239,34 @@ class Service(param.Parameterized):
         
     @property
     def query(self):
-        query = dict(timeS=self.subsetter.start_time.replace('-', ''),
-                     timeE=self.subsetter.end_time.replace('-', ''),
-                     purpose=self.purpose.value)
+        query = dict(purpose=self.purpose.value)
         if not isinstance(self.dataset_selectors[0], SpatialSubsetter):
             query.update(latS=self.subsetter.latitude_range[0],
                          latE=self.subsetter.latitude_range[-1],
                          lonS=self.subsetter.longitude_range[0],
                          lonE=self.subsetter.longitude_range[-1])
+        if not isinstance(self.dataset_selectors[0], TemporalSubsetter):
+            query.update(timeS=self.subsetter.start_time.replace('-', ''),
+                         timeE=self.subsetter.end_time.replace('-', ''))
+        if hasattr(self, 'months'):
+            query.update(months=[self.months.index(m) + 1 for m in self.months])
         latlon_basenames = ['latS', 'latE', 'lonS', 'lonE']
         latlon_names = [self.latlon_prefix + name for name in latlon_basenames]
+        time_basenames = ['timeS', 'timeE']
+        time_names = [self.time_prefix + name for name in time_basenames]
+        month_basename = 'months'
+        month_name = self.month_prefix + month_basename
         for i, selector in enumerate(self.all_selectors):
             mapper = dict(model=selector.dataset, var=selector.attrs['variable'], pres=selector.pressure)
             if 'latS' not in query:
                 latlon_vals = [*selector.latitude_range, *selector.longitude_range]
                 latlon_vmap = dict(zip(latlon_names, latlon_vals))
                 mapper.update(**latlon_vmap)
+            if 'timeS' not in query:
+                time_range = [t.replace('-', '') for t in selector.time_range]
+                mapper.update(**dict(zip(time_names, time_range)))
+            if 'months' not in query:
+                mapper[month_name] = [selector.months.index(m) + 1 for m in selector.months]
             for k, v in mapper.items():
                 if k == 'model':
                     v = v.replace('/', '_')
@@ -593,9 +607,42 @@ class AnomalyService(Service):
                 query[f'{k}2'] = query[f'{k}1']
         return query
 
-class Test(Service):
+class MapViewer(Service):
     selector_cls = DatasetMonthSelector
     subsetter_cls = SpatialSubsetter
+    time_prefix = 'v'
+    month_prefix = 'v'
+    endpoint = '/svc/mapView'
+    
+    def _postprocess_data(self, ds):
+        if self.nvars > 1:
+            vnames = {self.query[f'var{self.nvars}'] + f'_{(i+1)}': self.v(i+1) for i in range(self.nvars)}
+            ds = ds.rename(**vnames)
+        return ds
+    
+    @property
+    def figure(self):
+        if self.nvars == 1:
+            return self.ds.hvplot.quadmesh('longitude', 'latitude', self.query['var1'],
+                                            title=self.query['var1'], geo=True, 
+                                            projection=ccrs.PlateCarree(), crs=ccrs.PlateCarree(), 
+                                            coastline=True, width=800, height=400, rasterize=True)
+        figures = []
+        for i in range(1, self.nvars+1):
+            v = self.v(i)
+            f = self.ds.hvplot.quadmesh(f'longitude_{i}', f'latiitude_{i}', v,
+                                         title=v, geo=True, projection=ccrs.PlateCarree(),
+                                         crs=ccrs.PlateCarree(), coastline=True,
+                                         width=800, height=400, rasterize=True)
+            figures.append((v, f))
+        return pn.Tabs(*figures)
+    
+    @property
+    def query(self):
+        query = dict(**super().query)
+        query['scale'] = 0
+        query['nVar'] = self.nvars - 1
+        return query
 
 class ServiceViewer:
     def __init__(self):
@@ -609,7 +656,7 @@ class ServiceViewer:
             eof=EOFService(name='EOF'),
             joint_eof=JointEOFService(name='Joint EOF'),
             pdf=ConditionalPDFService(name='Conditional PDF'),
-            test=Test(name='Test')
+            map_viewer=MapViewer(name='Map Viewer')
         )
     
     def __getattr__(self, attr):
