@@ -2,6 +2,7 @@ from io import BytesIO
 import traceback
 import cartopy.crs as ccrs
 import numpy as np
+import scipy.ndimage as ndi
 import param
 import pandas as pd
 import datetime as dt
@@ -12,6 +13,7 @@ import hvplot.xarray
 import hvplot.pandas
 import holoviews as hv
 from holoviews import opts
+from fillna import replace_nans
 
 datasets = pd.read_csv('datasets.csv').drop_duplicates()
 variables = pd.read_csv('variables.csv')
@@ -143,22 +145,21 @@ class DatasetPresRangeSelector(DatasetSelector):
                 setattr(self, p, -999999)
 
 class DatasetSamplingSelector(DatasetSelector):
-    bin_spec = param.ObjectSelector(default='default', objects=['default', 'customized'],
-                                    label='Sampling Variable binning specification')
+    custom_bins = param.Boolean(False, label='Use custom binning specification')
     bin_min = param.String('-999999', precedence=-1)
     bin_max = param.String('-999999', precedence=-1)
-    nbins = param.Integer(-999999, precedence=-1, label='Number of Bins')
+    nbins = param.Integer(0, precedence=-1, label='Number of Bins')
     
-    @param.depends('bin_spec', watch=True)
+    @param.depends('custom_bins', watch=True)
     def _update_bins(self):
         for p in ['bin_min', 'bin_max', 'nbins']:
-            if self.bin_spec == 'customized':
+            if self.custom_bins:
                 v = '' if p in ['bin_min', 'bin_max'] else 0
                 setattr(self, p, v)
                 self.param[p].precedence = 1
             else:
                 self.param[p].precedence = -1
-                v = '-999999' if p in ['bin_min', 'bin_max'] else -999999
+                v = '-999999' if p in ['bin_min', 'bin_max'] else 0
                 setattr(self, p, v)
         
     
@@ -175,7 +176,7 @@ class Service(param.Parameterized):
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
-    host = 'http://api.jpl-cmda.org:8080'
+    host = 'http://api.jpl-cmda.org:8090'
     endpoint = '/'
     
     def __init__(self, **params):
@@ -185,7 +186,6 @@ class Service(param.Parameterized):
         if not self.selector_names:
             self.dataset_selectors = [self.selector_cls(svc, name='Dataset 1')]
         else:
-            self.param['nvars'].precedence = -1
             self.dataset_selectors = [
                 self.selector_cls(svc, name=self.selector_names[i])
                 for i in range(self.nvars)
@@ -262,7 +262,10 @@ class Service(param.Parameterized):
     
     @property
     def url(self):
-        return self.host + self.endpoint
+        if isinstance(self.endpoint, list):
+            return self.host + self.endpoint[self.nvars-1]
+        else:
+            return self.host + self.endpoint
     
     @property
     def figure(self):
@@ -288,8 +291,8 @@ class Service(param.Parameterized):
         if not isinstance(self.dataset_selectors[0], TemporalSubsetter):
             query.update(timeS=self.subsetter.start_time.replace('-', ''),
                          timeE=self.subsetter.end_time.replace('-', ''))
-        if hasattr(self, 'months'):
-            query.update(months=[self.months.index(m) + 1 for m in self.months])
+        if hasattr(self.subsetter, 'months'):
+            query.update(months=[self.subsetter.months.index(m) + 1 for m in self.subsetter.months])
         latlon_basenames = ['latS', 'latE', 'lonS', 'lonE']
         latlon_names = [self.latlon_prefix + name for name in latlon_basenames]
         time_basenames = ['timeS', 'timeE']
@@ -307,10 +310,14 @@ class Service(param.Parameterized):
                 mapper.update(**dict(zip(time_names, time_range)))
             if 'months' not in query and hasattr(selector, 'months'):
                 mapper[month_name] = [selector.months.index(m) + 1 for m in selector.months]
+            if hasattr(selector, 'nbins'):
+                mapper.update(binMin=selector.bin_min, binMax=selector.bin_max, binN=selector.nbins)
+            if hasattr(selector, 'pressure_max'):
+                mapper['presa'] = selector.pressure_max
             for k, v in mapper.items():
                 if k == 'model':
                     v = v.replace('/', '_')
-                if self.latlon_suf and k in latlon_basenames:
+                if k == 'presa' or (self.latlon_suf and k in latlon_basenames):
                     k = k[:-1] + str(i + 1) + k[-1]
                 else:
                     k += str(i + 1)
@@ -682,32 +689,69 @@ class MapView(Service):
         query['nVar'] = self.nvars - 1
         return query
 
-class ConditionalSamplingBase(Service):
+class ConditionalSampling(Service):
     target_name = 'Physical (Sampled) Variable'
     target_selector_cls = DatasetPresRangeSelector
     selector_cls = DatasetSamplingSelector
     subsetter_cls = SpatialSeasonalSubsetter
-    nvars = param.Integer(1, bounds=(1, 2), precedence=-1)
+    nvars = param.Integer(1, bounds=(1, 2), label='Number Of Variables')
     ntargets = param.Integer(1, bounds=(0, 1), precedence=-1)    
+    selector_names = ['Environmental Variable 1', 'Environmental Variable 2']
+    endpoint = ['/svc/conditionalSampling', '/svc/conditionalSampling2Var']
 
-class ConditionalSampling1(ConditionalSamplingBase):
-    selector_names = ['Environmental (Sampling) Variable']
-    endpoint = '/svc/conditionalSampling'
+    @property
+    def figure(self):
+        v1, v2 = self.query['var1'], self.query['var2'] + 'Bin'
+        vs = f'{v1}_nSample'
+        v1z, vsz = f'{v1}_z', f'{vs}_z'
+        if self.nvars == 1:
+            f1 = self.ds.hvplot.line(x=v2, y=v1, width=800, height=400, title=f'{v1} sorted by {v2}')
+            f2 = self.ds.hvplot.line(x=v2, y=vs, width=800, height=400, title='Number of Samples')
+            return pn.Column(f1, f2)
+        else:
+            ds = self.ds
+            v3 = self.query['var3'] + 'Bin'
+            dx, dy = f'{v2}z', f'{v3}z'
+            x, y = np.meshgrid(ds[v2], ds[v3])
+            z1 = replace_nans(ds[v1].values, 9)
+            xx = ndi.zoom(x, 3, prefilter=False)
+            yy = ndi.zoom(y, 3, prefilter=False)
+            zz1 = ndi.filters.gaussian_filter(ndi.zoom(z1, 3, prefilter=False), 1.4)
+            zz2 = ndi.filters.gaussian_filter(ndi.zoom(ds[vs], 3), 1.4)
+            zz2[zz2 < 0] = 0
+            ds = ds.assign_coords({dx: xx[0], dy: yy[:, 0]})
+            ds[v1z] = xr.DataArray(dims=(dy, dx), data=zz1, attrs=ds[v1].attrs)
+            ds[vsz] = xr.DataArray(dims=(dy, dx), data=zz2, attrs=ds[vs].attrs)
+            lb, ub = np.percentile(ds[vsz], 5), np.percentile(ds[vsz], 95)
+            f1 = ds.hvplot.quadmesh(dx, dy, v1z, rasterize=True, width=800, height=400, 
+                                    cmap='viridis', xlabel=ds.x_labelStr, ylabel=ds.y_labelStr, 
+                                    title=f'{v1} sorted by {v2} and {v3}')
+            f2 = ds.hvplot.quadmesh(dx, dy, vsz, rasterize=True, width=800, height=400, 
+                                    cmap='viridis', xlabel=ds.x_labelStr, ylabel=ds.y_labelStr,
+                                    clim=(int(lb), int(ub)), title='Number of Samples', logz=True)
+
+            return pn.Column(f1, f2)
+    
+    @property
+    def query(self):
+        query = dict(**super().query)
+        query.update(scale1=0, scale2=0, scale3=0)
+        return query
     
 class ServiceViewer:
     def __init__(self):
         self.svc = dict(
             time_series=TimeSeriesService(name='Time Series'),
             anomaly=AnomalyService(name='Anomaly'),
-            scatter_hist=ScatterHistService(name='Scatter and Histogram'),
-            random_forest=RandomForestService(name='Random Forest Importance'),
+            scatter_hist=ScatterHistService(name='Scatter/Histogram'),
+            random_forest=RandomForestService(name='Random Forest'),
             difference_plot=DifferencePlotService(name='Difference Map'),
             correlation_plot=CorrelationMapService(name='Correlation Map'),
             eof=EOFService(name='EOF'),
             joint_eof=JointEOFService(name='Joint EOF'),
             pdf=ConditionalPDFService(name='Conditional PDF'),
             map_view=MapView(name='Map View'),
-            conditional_sampling1=ConditionalSampling1(name='Conditional Sampling 1 Var')
+            conditional_sampling=ConditionalSampling(name='Conditional Sampling')
         )
     
     def __getattr__(self, attr):
@@ -719,4 +763,3 @@ class ServiceViewer:
     @property
     def service_names(self):
         return list(self.svc.keys())
-    
