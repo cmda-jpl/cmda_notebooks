@@ -12,3 +12,9 @@ dependencies:
   - requests
   - geoviews
   - panel
+  - healpy
+  - pyresample
+  - pyproj
+  - astropy
+  - yaml
+  
