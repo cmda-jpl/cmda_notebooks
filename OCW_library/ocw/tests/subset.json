@@ -1,0 +1,12 @@
+{
+    "email":"yournamem@emailaddress.com",
+    "query":[
+        {
+            "datasetId":"PODAAC-GHRAM-4FA01",
+            "granuleIds":["20170418-ABOM-L4HRfnd-AUS-v01-fv01_0-RAMSSA_09km.nc"],
+            "bbox":"-180,-90,180,90",
+            "variables":["analysed_sst", "lat","lon","time"],
+            "compact":false
+        }
+    ]
+} 

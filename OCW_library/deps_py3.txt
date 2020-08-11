@@ -1,0 +1,15 @@
+cython
+numpy
+scipy
+matplotlib
+basemap
+netcdf4
+h5py
+bottle
+python-dateutil
+mock
+webtest
+podaacpy
+networkx
+netcdftime
+lxml
