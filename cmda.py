@@ -1,5 +1,6 @@
 from io import BytesIO
 import traceback
+import json
 import cartopy.crs as ccrs
 import numpy as np
 import scipy.ndimage as ndi
@@ -21,8 +22,16 @@ names = datasets.dataset_name
 categories = datasets.category.unique()
 dset_dict = {cat: list(names[datasets.category == cat].unique()) for cat in categories}
 seasons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+url_template = """
+## Browser URL:
+{url}
+## Plot:
+"""
 
-def get_variables(dataset_name):
+def get_variables(dataset_name, three_dim_only=False):
+    if three_dim_only:
+        return datasets.long_name[(names == dataset_name) 
+                                  & (datasets.dimensions == 3)].dropna().unique()
     return datasets.long_name[names == dataset_name].dropna().unique()
 
 def get_attrs(dataset_name, variable_name):
@@ -31,13 +40,14 @@ def get_attrs(dataset_name, variable_name):
 def gen_time_range(st, et):
     return pd.date_range(st, et, freq='MS')
 
-class SpatialSubsetter(param.Parameterized):
-    latitude_range = param.Range(default=(-90, 90), bounds=(-90, 90))
-    longitude_range = param.Range(default=(0, 360), bounds=(0, 360))
-    
+class NullSubsetter(param.Parameterized):
     def __init__(self, service=None, **params):
         param.Parameterized.__init__(self, **params)
     
+class SpatialSubsetter(NullSubsetter):
+    latitude_range = param.Range(default=(-90, 90), bounds=(-90, 90))
+    longitude_range = param.Range(default=(0, 360), bounds=(0, 360))
+        
 class TemporalSubsetter(param.Parameterized):
     start_time = param.String('')
     end_time = param.String('')
@@ -82,8 +92,11 @@ class DatasetSelector(param.Parameterized):
     variable = param.ObjectSelector(default=defaults[0], objects=defaults)
     pressure = param.Integer(-999999, precedence=-1)
     
-    def __init__(self, service, **params):
+    def __init__(self, service, three_dim_only=False, **params):
         self.service = service
+        self.three_dim_only = three_dim_only
+        if three_dim_only:
+            self._update_variable()
         super().__init__(**params)
     
     @param.depends('category', watch=True)
@@ -93,8 +106,9 @@ class DatasetSelector(param.Parameterized):
 
     @param.depends('dataset', watch=True)
     def _update_variable(self):
-        self.param['variable'].objects = get_variables(self.dataset)
-        self.variable = get_variables(self.dataset)[0]
+        self.param['variable'].objects = get_variables(self.dataset, 
+                                                       three_dim_only=self.three_dim_only)
+        self.variable = get_variables(self.dataset, three_dim_only=self.three_dim_only)[0]
 
     @param.depends('category', 'dataset', 'variable', watch=True)
     def _update_subsetter(self):
@@ -109,7 +123,8 @@ class DatasetSelector(param.Parameterized):
     def _update_pressure(self):
         if self.attrs['dimensions'] > 2:
             self.pressure = 500
-            self.param['pressure'].precedence = 1
+            if not self.three_dim_only:
+                self.param['pressure'].precedence = 1
         else:
             self.param['pressure'].precedence = -1
             self.pressure = -999999
@@ -128,6 +143,9 @@ class DatasetBinsSelector(DatasetSelector):
     nbins = param.Integer(10, label='Number of Bins')
 
 class DatasetMonthSelector(DatasetSelector, SeasonalSubsetter):
+    pass
+
+class DatasetMonthSpatialSelector(DatasetSelector, SpatialSeasonalSubsetter):
     pass
 
 class DatasetPresRangeSelector(DatasetSelector):
@@ -173,30 +191,37 @@ class Service(param.Parameterized):
     time_prefix = ''
     month_prefix = ''
     latlon_suf = True
+    three_dim_only = False
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
     host = 'http://api.jpl-cmda.org:8090'
     endpoint = '/'
     
-    def __init__(self, **params):
+    def __init__(self, viewer=None, **params):
+        self.viewer = viewer
         t_svc = None if issubclass(self.target_selector_cls, TemporalSubsetter) else self
         svc = None if issubclass(self.selector_cls, TemporalSubsetter) else self
-        self.target_selector = self.target_selector_cls(t_svc, name=self.target_name)
+        self.target_selector = self.target_selector_cls(t_svc, three_dim_only=self.three_dim_only, 
+                                                        name=self.target_name)
         if not self.selector_names:
-            self.dataset_selectors = [self.selector_cls(svc, name='Dataset 1')]
+            self.dataset_selectors = [self.selector_cls(svc, three_dim_only=self.three_dim_only, 
+                                                        name='Dataset 1')]
         else:
             self.dataset_selectors = [
-                self.selector_cls(svc, name=self.selector_names[i])
+                self.selector_cls(svc, three_dim_only=self.three_dim_only, 
+                                  name=self.selector_names[i])
                 for i in range(self.nvars)
             ]
-        self.subsetter = self.subsetter_cls(svc, name='Subsetting Options')
+        sub_name = '' if self.subsetter_cls is NullSubsetter else 'Subsetting Options'
+        self.subsetter = self.subsetter_cls(svc, name=sub_name)
         self.purpose = pn.widgets.TextAreaInput(name='Execution Purpose',
                                                 placeholder='Describe execution purpose here (Optional)')
         def press(event):
             self.npresses += 1
-        self.plot_button = pn.widgets.Button(name='Generate Plot')
+        self.plot_button = pn.widgets.Button(name='Generate Data')
         self.plot_button.on_click(press)
+        self.browser_url = pn.pane.Markdown(url_template.format(url=''), width=800)
         super().__init__(**params)
     
     @param.depends('nvars', watch=True)
@@ -225,24 +250,35 @@ class Service(param.Parameterized):
         self.plot_button.name = 'Working...'
         try:
             figure = self.figure
+            self._build_output(figure)
         except:
             self._pane.object = traceback.format_exc()
             figure = self._pane
         finally:
             self.plot_button.disabled = False
-            self.plot_button.name = 'Generate Plot'
+            self.plot_button.name = 'Generate Data'
         return figure
-    
-    def panel(self):
+ 
+    def _build_output(self, fig):
         kwargs = {}
         if hasattr(self, 'widgets'):
             kwargs['widgets'] = self.widgets
-        return pn.Row(pn.Column(pn.Param(self.param, **kwargs),
-                                self.select_dataset, self.subsetter,
-                                self.purpose, self.plot_button), self.plot)
+        output = pn.Column(pn.Param(self.param, **kwargs),
+                           self.select_dataset, self.subsetter,
+                           self.purpose, self.plot_button, self.browser_url, 
+                           fig)
+        if self.viewer is not None:
+            self.viewer._panels[self.name] = output
+            self.viewer._save_mimebundle()
+        return output
+ 
+    def panel(self):
+        return self._build_output(self.plot)
     
     def download_data(self):
-        url = requests.get(self.url, params=self.query).json()['dataUrl']
+        r1 = requests.get(self.url, params=self.query)
+        self.browser_url.object = url_template.format(url=r1.url)
+        url = r1.json()['dataUrl']
         r = requests.get(url)
         buf = BytesIO(r.content)
         return self._postprocess_data(xr.open_dataset(buf, decode_times=False))
@@ -336,17 +372,18 @@ class TimeSeriesService(Service):
         datasets = [self.v(i) for i in range(1, self.nvars+1)]
         times = gen_time_range(self.subsetter.start_time, self.subsetter.end_time)
         ds = (ds.rename(varIdx='Dataset', monthIdx='time')
-                 .assign_coords(Dataset=datasets, time=times))
+                .rename({self.query['var1']: 'variable'})
+                .assign_coords(Dataset=datasets, time=times))
         ds['time'] = times
         return ds
         
     @property
     def figure(self):
         ds = self.ds.copy()
-        y = self.query['var1']
+        y = 'variable'
         if self.nvars > 1:
             for i in range(2, self.nvars+1):
-                if self.query[f'var{i}'] != y:
+                if self.query[f'var{i}'] != self.query['var1']:
                     ds[y] = ((ds[y] - ds[y].min('time')) / 
                              (ds[y].max('time') - ds[y].min('time')))
                     ds[y].attrs['units'] = '0-1'
@@ -652,7 +689,7 @@ class AnomalyService(Service):
                 query[f'{k}2'] = query[f'{k}1']
         return query    
     
-class MapView(Service):
+class MapViewService(Service):
     selector_cls = DatasetMonthSelector
     subsetter_cls = SpatialSubsetter
     time_prefix = 'v'
@@ -689,7 +726,7 @@ class MapView(Service):
         query['nVar'] = self.nvars - 1
         return query
 
-class ConditionalSampling(Service):
+class ConditionalSamplingService(Service):
     target_name = 'Physical (Sampled) Variable'
     target_selector_cls = DatasetPresRangeSelector
     selector_cls = DatasetSamplingSelector
@@ -737,6 +774,64 @@ class ConditionalSampling(Service):
         query = dict(**super().query)
         query.update(scale1=0, scale2=0, scale3=0)
         return query
+
+    
+class ZonalMeanService(Service):
+    selector_cls = DatasetMonthSpatialSelector
+    subsetter_cls = NullSubsetter
+    nvars = param.Integer(1, bounds=(1, 8), label='Number Of Variables')
+    time_prefix = 'v'
+    month_prefix = 'v'
+    latlon_prefix = 'v'
+    endpoint = '/svc/zonalMean'
+
+    def _postprocess_data(self, ds):
+        if self.nvars < 2:
+            ds = ds.rename(latitude='lat')
+        else:
+            ds = ds.rename(varIdx='Dataset')
+        variable = self.query['var1']
+        ds = ds.rename({variable: 'variable'})
+        vnames = [f'{self.v(i+1)} ({sel.start_time}-{sel.end_time})' 
+                  for i, sel in enumerate(self.all_selectors)]
+        ds = ds.assign_coords(Dataset=vnames)
+        return ds
+    
+    @property
+    def figure(self):
+        y = 'variable'
+        ds = self.ds.copy()
+        if self.nvars > 1:
+            for i in range(2, self.nvars+1):
+                if self.query[f'var{i}'] != self.query['var1']:
+                    ds[y] = ((ds[y] - ds[y].min('lat')) / 
+                             (ds[y].max('lat') - ds[y].min('lat')))
+                    ds[y].attrs['units'] = '0-1'
+                    ds = ds.rename({y: 'Normalized Variable'})
+                    y = 'Normalized Variable'
+        return ds.hvplot.line(x='lat', y=y, by='Dataset', 
+                              width=800, height=400, legend='bottom')
+    
+    @property
+    def query(self):
+        query = dict(**super().query)
+        query['scale'] = 0
+        query['nVar'] = self.nvars - 1
+        return query
+
+class VerticalProfileService(Service):
+    subsetter_cls = SpatialSeasonalSubsetter
+    three_dim_only = True
+    endpoint = '/svc/threeDimVerticalProfile'
+    
+    @property
+    def figure(self):
+        ds = self.ds.expand_dims('dummy').assign_coords(plev=self.ds.plev*100)
+        x = self.query['var1']
+        start, end = self.query['timeS'], self.query['timeE']
+        return (ds.hvplot.line(x=x, y='plev', width=800, height=400, 
+                               ylabel='Pressure Level (hPa)', title=f'{start}-{end}')
+                .opts(invert_yaxis=True))
     
 class ServiceViewer:
     def __init__(self):
@@ -750,15 +845,28 @@ class ServiceViewer:
             eof=EOFService(name='EOF'),
             joint_eof=JointEOFService(name='Joint EOF'),
             pdf=ConditionalPDFService(name='Conditional PDF'),
-            map_view=MapView(name='Map View'),
-            conditional_sampling=ConditionalSampling(name='Conditional Sampling')
+            map_view=MapViewService(name='Map View'),
+            conditional_sampling=ConditionalSamplingService(name='Conditional Sampling'),
+            zonal_mean=ZonalMeanService(name='Zonal Mean'),
+            vertical_profile=VerticalProfileService(name='Vertical Profile')
         )
+        for svc in self.svc.values():
+            svc.viewer = self
+        self._panels = {}
     
     def __getattr__(self, attr):
         return self.svc[attr]
                 
     def view(self):
-        return pn.Tabs(*[(svc.name, svc.panel()) for svc in self.svc.values()])
+        return pn.Tabs(*[(svc.name, svc.panel()) for svc in self.svc.values()],
+                       dynamic=True, tabs_location='right')
+    
+    def _save_mimebundle(self):
+        obj = pn.Tabs(*[(k, v) for k, v in self._panels.items()],
+                      tabs_location='right')
+        bundle = obj._repr_mimebundle_()
+        with open('.cmda_data.json', 'w') as f:
+            json.dump(bundle, f)  
 
     @property
     def service_names(self):
