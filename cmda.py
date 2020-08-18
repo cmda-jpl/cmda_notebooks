@@ -1,6 +1,7 @@
 from io import BytesIO
 import traceback
 import json
+import warnings
 import cartopy.crs as ccrs
 import numpy as np
 import scipy.ndimage as ndi
@@ -15,7 +16,10 @@ import hvplot.pandas
 import holoviews as hv
 from holoviews import opts
 from fillna import replace_nans
+from holoviews.plotting.util import list_cmaps
 
+warnings.filterwarnings('ignore')
+cmaps = list_cmaps(reverse=False, provider='matplotlib')
 datasets = pd.read_csv('datasets.csv').drop_duplicates()
 variables = pd.read_csv('variables.csv')
 names = datasets.dataset_name
@@ -145,7 +149,7 @@ class DatasetBinsSelector(DatasetSelector):
     nbins = param.Integer(10, label='Number of Bins')
 
 class DatasetMonthSelector(DatasetSelector, SeasonalSubsetter):
-    pass
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap')
 
 class DatasetMonthSpatialSelector(DatasetSelector, SpatialSeasonalSubsetter):
     pass
@@ -261,6 +265,10 @@ class Service(param.Parameterized):
             self.plot_button.name = 'Generate Data'
         return figure
  
+    @param.depends('npresses', watch=True)
+    def _save_state(self):
+        self.viewer._save_mimebundle()
+
     def _build_output(self, fig):
         kwargs = {}
         if hasattr(self, 'widgets'):
@@ -271,7 +279,6 @@ class Service(param.Parameterized):
                            fig)
         if self.viewer is not None:
             self.viewer._panels[self.name] = output
-            self.viewer._save_mimebundle()
         return output
  
     def panel(self):
@@ -351,7 +358,7 @@ class Service(param.Parameterized):
                 mapper.update(**dict(zip(time_names, time_range)))
             if 'months' not in query and hasattr(selector, 'months'):
                 mapper[month_name] = [selector.months.index(m) + 1 for m in selector.months]
-            if hasattr(selector, 'nbins'):
+            if hasattr(selector, 'bin_min'):
                 mapper.update(binMin=selector.bin_min, binMax=selector.bin_max, binN=selector.nbins)
             if hasattr(selector, 'pressure_max'):
                 mapper['presa'] = selector.pressure_max
@@ -423,9 +430,9 @@ class ScatterHistService(Service):
     def figure(self):
         v1, v2 = self.v(1), self.v(2)
         f1 = (self.ds.reset_coords().to_dataframe().hvplot
-                  .scatter(x=v1, y=v2, title=f'Correlation: {self.ds.corr:1.2}', width=1000, height=300))
-        f2 = self.ds.hvplot.hist(y=v1, width=1000, height=300, normed=True)
-        f3 = self.ds.hvplot.hist(y=v2, width=1000, height=300, normed=True)
+                  .scatter(x=v1, y=v2, title=f'Correlation: {self.ds.corr:1.2}', width=800, height=300))
+        f2 = self.ds.hvplot.hist(y=v1, width=800, height=300, normed=True)
+        f3 = self.ds.hvplot.hist(y=v2, width=800, height=300, normed=True)
         return pn.Column(f1, f2, f3)
 
     @property
@@ -439,6 +446,10 @@ class DifferencePlotService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     nvars = param.Integer(2, precedence=-1)
     endpoint = '/svc/diffPlot2V'
+    cmap1 = param.ObjectSelector(objects=cmaps, default='coolwarm', 
+                                 label='Difference Colormap', precedence=0.1)
+    cmap2 = param.ObjectSelector(objects=cmaps, default='viridis', 
+                                 label='Variable Colormap', precedence=0.1)
     
     def _postprocess_data(self, ds):
         v1, v2 = self.v(1), self.v(2)
@@ -452,15 +463,18 @@ class DifferencePlotService(Service):
         f1 = self.ds.hvplot.quadmesh('lon', 'lat', 'diff', title='diff',
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True)
+                                     width=800, height=400, rasterize=True,
+                                     cmap=self.cmap1)
         f2 = self.ds.hvplot.quadmesh('lon', 'lat', v1, title=v1,
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True)
+                                     width=800, height=400, rasterize=True,
+                                     cmap=self.cmap2)
         f3 = self.ds.hvplot.quadmesh('lon', 'lat', v2, title=v2,
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True)
+                                     width=800, height=400, rasterize=True,
+                                     cmap=self.cmap2)
         return pn.Column(f1, f2, f3)
 
     @property
@@ -486,7 +500,7 @@ class RandomForestService(Service):
     def figure(self):
         vs = self.v(1)
         y = f'importance to predict {vs}'
-        return self.ds.hvplot.bar(x='index', y=y, width=1000, height=500)
+        return self.ds.hvplot.bar(x='index', y=y, width=800, height=400)
 
     @property
     def query(self):
@@ -499,6 +513,7 @@ class EOFService(Service):
     selector_names = ['Data']
     nvars = param.Integer(1, precedence=-1)
     anomaly = param.Boolean(False, label='Use Anomaly')
+    cmap = param.ObjectSelector(objects=cmaps, default='coolwarm', label='Colormap', precedence=0.1)
     endpoint = '/svc/EOF'
     
     def _postprocess_data(self, ds):
@@ -513,7 +528,7 @@ class EOFService(Service):
                                       title='Variance Explained (%)')
         f2 = self.ds.patterns.hvplot.quadmesh('lon', 'lat', title='EOF',
                                           widget_location='bottom',
-                                          projection=ccrs.PlateCarree(),
+                                          projection=ccrs.PlateCarree(), cmap=self.cmap,
                                           crs=ccrs.PlateCarree(), geo=True,
                                           coastline=True, rasterize=True)
         f3 = self.ds.tser.hvplot.line(x='time', y='tser', title='PC',
@@ -530,6 +545,7 @@ class JointEOFService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     selector_cls = DatasetAnomalySelector
     nvars = param.Integer(2, precedence=-1)
+    cmap = param.ObjectSelector(objects=cmaps, default='coolwarm', label='Colormap', precedence=0.1)
     endpoint = '/svc/JointEOF'
     
     def _postprocess_data(self, ds):
@@ -548,7 +564,7 @@ class JointEOFService(Service):
         for i in range(1, 3):
             ef1 = self.ds[f'pattern{i}'].hvplot.quadmesh(
                                             f'lon{i}', f'lat{i}', title='EOF',
-                                            widget_location='bottom',
+                                            widget_location='bottom', cmap=self.cmap,
                                             projection=ccrs.PlateCarree(),
                                             crs=ccrs.PlateCarree(), geo=True,
                                             coastline=True, rasterize=True)
@@ -568,6 +584,7 @@ class CorrelationMapService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     nvars = param.Integer(2, precedence=-1)
     lag = param.Integer(0, label='Time Lag in Months')
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap', precedence=0.1)
     endpoint = '/svc/correlationMap'
             
     @property
@@ -575,8 +592,8 @@ class CorrelationMapService(Service):
         return self.ds.corr.hvplot.quadmesh('lon', 'lat',
                                             projection=ccrs.PlateCarree(),
                                             crs=ccrs.PlateCarree(), geo=True,
-                                            coastline=True, width=1000,
-                                            height=500, rasterize=True)
+                                            coastline=True, width=800, cmap=self.cmap,
+                                            height=400, rasterize=True)
 
     @property
     def query(self):
@@ -588,6 +605,7 @@ class ConditionalPDFService(Service):
     selector_names = ['Independent Variable', 'Dependent Variable']
     selector_cls = DatasetBinsSelector
     nvars = param.Integer(2, precedence=-1)
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap', precedence=0.1)
     endpoint = '/svc/conditionalPdf'
     
     def _postprocess_data(self, ds):
@@ -603,11 +621,11 @@ class ConditionalPDFService(Service):
             x = self.ds.binsX.isel(x=[i, i+1]).values
             y = self.ds.binsY.isel(xc=[i, i]).values
             z = self.ds.pdf.isel(xc=i).values.reshape(-1, 1)
-            submesh = hv.QuadMesh((x, y, z), vdims=['pdf'], kdims=[v1, v2])
+            submesh = hv.QuadMesh((x, y, z))
             meshes.append(submesh)
         mesh = hv.Overlay(meshes) * curve
         return mesh.opts(opts.QuadMesh(colorbar=True, width=800, height=400,
-                                       tools=['hover'], cmap='jet'))
+                                       tools=['hover'], cmap=self.cmap))
 
     @property
     def query(self):
@@ -630,6 +648,8 @@ class AnomalyService(Service):
     ref_period = param.Boolean(False, label='Calculate reference from different period')
     start_time2 = param.String('', precedence=-1, label='Reference Start Time')
     end_time2 = param.String('', precedence=-1, label='Reference End Time')
+    yscale = param.ObjectSelector(objects=['linear', 'log'], label='Y Axis Scale', precedence=0.1)
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap', precedence=0.1)
     endpoint = '/svc/anomaly'
 
     def __init__(self, **params):
@@ -671,13 +691,14 @@ class AnomalyService(Service):
     @property
     def figure(self):
         v = self.query['var1']
+        logy = self.yscale == 'log'
         area_mean = self.ds.weighted(np.cos(np.deg2rad(self.ds.lat))).mean(('lon', 'lat'))
-        f1 = area_mean.hvplot.line(x='time', y=v, width=800, height=400, legend='bottom')
+        f1 = area_mean.hvplot.line(x='time', y=v, width=800, height=400, legend='bottom', logy=logy)
         f2 = self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
                                      width=800, height=400, rasterize=True,
-                                     widget_location='bottom')
+                                     widget_location='bottom', cmap=self.cmap)
         return pn.Column(f1, f2)
     
     @property
@@ -710,16 +731,18 @@ class MapViewService(Service):
     @property
     def figure(self):
         if self.nvars == 1:
+            cmap = self.all_selectors[0].cmap
             return self.ds.hvplot.quadmesh('longitude', 'latitude', self.query['var1'],
-                                            title=self.query['var1'], geo=True, 
+                                            title=self.query['var1'], geo=True, cmap=cmap,
                                             projection=ccrs.PlateCarree(), crs=ccrs.PlateCarree(), 
                                             coastline=True, width=800, height=400, rasterize=True)
         figures = []
         for i in range(1, self.nvars+1):
             v = self.v(i)
+            cmap = self.all_selectors[i].cmap
             f = self.ds.hvplot.quadmesh(f'longitude_{i}', f'latiitude_{i}', v,
                                          title=v, geo=True, projection=ccrs.PlateCarree(),
-                                         crs=ccrs.PlateCarree(), coastline=True,
+                                         crs=ccrs.PlateCarree(), coastline=True, cmap=cmap,
                                          width=800, height=400, rasterize=True)
             figures.append((v, f))
         return pn.Tabs(*figures)
@@ -738,17 +761,27 @@ class ConditionalSamplingService(Service):
     subsetter_cls = SpatialSeasonalSubsetter
     nvars = param.Integer(1, bounds=(1, 2), label='Number Of Variables')
     ntargets = param.Integer(1, bounds=(0, 1), precedence=-1)    
+    xscale = param.ObjectSelector(objects=['linear', 'log'], 
+                                  label='X (Sampling Variable) Scale', precedence=0.1)
+    yscale = param.ObjectSelector(objects=['linear', 'log'], 
+                                  label='Y (Sampling Variable or Pressure) Scale', 
+                                  precedence=0.1)
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap', precedence=0.1)
     selector_names = ['Environmental Variable 1', 'Environmental Variable 2']
     endpoint = ['/svc/conditionalSampling', '/svc/conditionalSampling2Var']
 
     @property
     def figure(self):
         v1, v2 = self.query['var1'], self.query['var2'] + 'Bin'
+        logx = self.xscale == 'log'
+        logy = self.yscale == 'log'
         vs = f'{v1}_nSample'
         v1z, vsz = f'{v1}_z', f'{vs}_z'
         if self.nvars == 1:
-            f1 = self.ds.hvplot.line(x=v2, y=v1, width=800, height=400, title=f'{v1} sorted by {v2}')
-            f2 = self.ds.hvplot.line(x=v2, y=vs, width=800, height=400, title='Number of Samples')
+            f1 = self.ds.hvplot.line(x=v2, y=v1, logx=logx, logy=logy, 
+                                     width=800, height=400, title=f'{v1} sorted by {v2}')
+            f2 = self.ds.hvplot.line(x=v2, y=vs, logx=logx, logy=logy, 
+                                     width=800, height=400, title='Number of Samples')
             return pn.Column(f1, f2)
         else:
             ds = self.ds
@@ -766,11 +799,13 @@ class ConditionalSamplingService(Service):
             ds[vsz] = xr.DataArray(dims=(dy, dx), data=zz2, attrs=ds[vs].attrs)
             lb, ub = np.percentile(ds[vsz], 5), np.percentile(ds[vsz], 95)
             f1 = ds.hvplot.quadmesh(dx, dy, v1z, rasterize=True, width=800, height=400, 
-                                    cmap='viridis', xlabel=ds.x_labelStr, ylabel=ds.y_labelStr, 
+                                    cmap=self.cmap, xlabel=ds.x_labelStr, ylabel=ds.y_labelStr, 
+                                    logx=logx, logy=logy,
                                     title=f'{v1} sorted by {v2} and {v3}')
             f2 = ds.hvplot.quadmesh(dx, dy, vsz, rasterize=True, width=800, height=400, 
-                                    cmap='viridis', xlabel=ds.x_labelStr, ylabel=ds.y_labelStr,
-                                    clim=(int(lb), int(ub)), title='Number of Samples', logz=True)
+                                    cmap=self.cmap, xlabel=ds.x_labelStr, ylabel=ds.y_labelStr,
+                                    clim=(int(lb), int(ub)), title='Number of Samples', logx=logx, 
+                                    logy=logy, logz=True)
 
             return pn.Column(f1, f2)
     
@@ -785,6 +820,8 @@ class ZonalMeanService(Service):
     selector_cls = DatasetMonthSpatialSelector
     subsetter_cls = NullSubsetter
     nvars = param.Integer(1, bounds=(1, 8), label='Number Of Variables')
+    yscale = param.ObjectSelector(objects=['linear', 'log'], label='Pressure Scale', precedence=0.1)
+    xscale = param.ObjectSelector(objects=['linear', 'log'], label='Variable Scale', precedence=0.1)
     time_prefix = 'v'
     month_prefix = 'v'
     latlon_prefix = 'v'
@@ -805,6 +842,8 @@ class ZonalMeanService(Service):
     @property
     def figure(self):
         y = 'variable'
+        logx = self.xscale == 'log'
+        logy = self.yscale == 'log'
         ds = self.ds.copy()
         if self.nvars > 1:
             for i in range(2, self.nvars+1):
@@ -814,7 +853,7 @@ class ZonalMeanService(Service):
                     ds[y].attrs['units'] = '0-1'
                     ds = ds.rename({y: 'Normalized Variable'})
                     y = 'Normalized Variable'
-        return ds.hvplot.line(x='lat', y=y, by='Dataset', 
+        return ds.hvplot.line(x='lat', y=y, by='Dataset', logy=logy, logx=logx,
                               width=800, height=400, legend='bottom')
     
     @property
