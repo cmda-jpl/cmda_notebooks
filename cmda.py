@@ -226,7 +226,7 @@ class Service(param.Parameterized):
                                                 placeholder='Describe execution purpose here (Optional)')
         def press(event):
             self.npresses += 1
-        self.plot_button = pn.widgets.Button(name='Generate Data')
+        self.plot_button = pn.widgets.Button(name='Generate Data', width=200)
         self.plot_button.on_click(press)
         self.browser_url = pn.pane.Markdown(url_template.format(api_url='', plot_url=''), width=800)
         super().__init__(**params)
@@ -374,8 +374,8 @@ class Service(param.Parameterized):
                     k += str(i + 1)
                 query[k] = v
         return query
-
-
+        
+    
 class TimeSeriesService(Service):
     selector_cls = DatasetSubsetSelector
     subsetter_cls = TemporalSubsetter
@@ -544,6 +544,7 @@ class EOFService(Service):
         query['anomaly'] = int(self.anomaly)
         return query
 
+    
 class JointEOFService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     selector_cls = DatasetAnomalySelector
@@ -583,6 +584,7 @@ class JointEOFService(Service):
             query[f'anomaly{i}'] = int(self.all_selectors[i-1].anomaly)
         return query
 
+    
 class CorrelationMapService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     nvars = param.Integer(2, precedence=-1)
@@ -718,6 +720,7 @@ class AnomalyService(Service):
                 query[f'{k}2'] = query[f'{k}1']
         return query    
     
+    
 class MapViewService(Service):
     selector_cls = DatasetMonthSelector
     subsetter_cls = SpatialSubsetter
@@ -757,6 +760,7 @@ class MapViewService(Service):
         query['nVar'] = self.nvars - 1
         return query
 
+    
 class ConditionalSamplingService(Service):
     target_name = 'Physical (Sampled) Variable'
     target_selector_cls = DatasetPresRangeSelector
@@ -866,6 +870,7 @@ class ZonalMeanService(Service):
         query['nVar'] = self.nvars - 1
         return query
 
+    
 class VerticalProfileService(Service):
     subsetter_cls = SpatialSeasonalSubsetter
     three_dim_only = True
@@ -879,6 +884,55 @@ class VerticalProfileService(Service):
         return (ds.hvplot.line(x=x, y='plev', width=800, height=400, 
                                ylabel='Pressure Level (hPa)', title=f'{start}-{end}')
                 .opts(invert_yaxis=True))
+
+
+class RemoteFileService(param.Parameterized):
+    url = param.String('', label='NetCDF File URL')
+    decode_times = param.Boolean(False, label='Decode Times')
+    npresses = param.Integer(0, precedence=-1)
+    
+    def __init__(self, **params):
+        def press(event):
+            self.npresses += 1
+        self.button = pn.widgets.Button(name='Load Data', width=200)
+        self.button.on_click(press)
+        super().__init__(**params)
+    
+    def download_data(self):
+        r = requests.get(self.url)
+        buf = BytesIO(r.content)
+        return xr.open_dataset(buf, decode_times=self.decode_times)
+    
+    @property
+    def ds(self):
+        if not hasattr(self, '_cache'):
+            self._cache = {}
+        if self.url not in self._cache:
+            self._cache[self.url] = self.download_data()
+        return self._cache[self.url]
+
+    @param.depends('npresses')
+    def xr(self):
+        if not self.npresses:
+            self._pane = pn.pane.HTML('', width=800)
+            return self._pane
+        self.button.disabled = True
+        self.button.name = 'Working...'
+        try:
+            ds = self.ds
+        except:
+            self._pane.object = traceback.format_exc()
+            ds = self._pane
+        finally:
+            self.button.disabled = False
+            self.button.name = 'Load Data'
+        return ds
+    
+    def panel(self):
+        widgets = dict(url=dict(type=pn.widgets.TextAreaInput, width=600))
+        return pn.Column(pn.Param(self.param, widgets=widgets), 
+                         self.button, self.xr, height=1000)
+    
     
 class ServiceViewer:
     def __init__(self):
@@ -895,7 +949,8 @@ class ServiceViewer:
             map_view=MapViewService(name='Map View'),
             conditional_sampling=ConditionalSamplingService(name='Conditional Sampling'),
             zonal_mean=ZonalMeanService(name='Zonal Mean'),
-            vertical_profile=VerticalProfileService(name='Vertical Profile')
+            vertical_profile=VerticalProfileService(name='Vertical Profile'),
+            open_url=RemoteFileService(name='Open File URL')
         )
         for svc in self.svc.values():
             svc.viewer = self
