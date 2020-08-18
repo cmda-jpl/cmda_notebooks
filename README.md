@@ -3,86 +3,36 @@
 
 ![img](https://puu.sh/G5iCA/89ea6c3097.png)
 
-## Implementing your own CMDA Service
-This notebook uses the [panel](https://panel.holoviz.org/) library to generate the GUI elements for each CMDA Service. 
-Reading through the documentation first is highly recommended.
+## JPL Climate Summer School (CCS) JupyterHub server
+These notebooks are currently deployed at: 
 
+[jpl-cmda.org](jpl-cmda.org)
 
-To create a GUI for a CMDA Service, create a subclass of `Service` in `cmda.py`. You'll need to override the following methods/properties:
+## Quick Tips for CCS students
 
-### Class Variables
-You may optionally override the following class variables:
-- `selector_names`: All input datasets are separated by tabs. This variable lets you override the default labels in tabs.
-- `selector_cls`: What class to use for the dataset selection widget.
-- `ntargets`: Override this if your service separates input datasets into two groups (eg, reference vs target datasets)
-- `nvars`: The number of input variables/datasets. Override if the service requires more than one variable.
-- `endpoint`: The REST API endpoint for the Service.
+### Setting up your workspace
+Upon logging into your server, you should find the following two directories: 
 
-`Service` is also a subclass of `param.Parameterized`, so you can add additional GUI elements with additional class variables.
+![img](https://i.imgur.com/IfMwUwe.png)  
 
-Example:
+**cmda_notebooks** contains CMDA python library and associated notebooks, while **ccs2020** is a copy (created the first time you log in) that is intended to serve as your workspace. Restarting your server will always force a resync of the cmda_notebooks directory, which can be useful for applying bug fixes. **To ensure that your work is not overwritten upon restarts, please save all your work in the ccs2020 directory only.**
 
-```python
-class EOFService(Service):
-    selector_names = ['Data']
-    nvars = param.Integer(1, precedence=-1)
-    anomaly = param.Boolean(False, label='Use Anomaly')
-    endpoint = '/svc/EOF'
-```
+### Workspace Overview 
 
-### Generating the REST API query
-The `query` accessor defines how the values stored in the GUI elements get mapped to the query parameters that get passed to the API call. 
-The `Service` base class handles most of these, but you will likely need to override this to set additonal parameters specific to the service: 
+![img](https://i.imgur.com/XsPdZt3.png)
 
-Example:
-```python
-    @property
-    def query(self):
-        query = dict(**super().query)
-        query['anomaly'] = int(self.anomaly)
-        return query
- ```
+- `cmda.py` and `fillna.py` contains the main library code. Do not edit these!
+- `datasets.csv` and `variables.csv` contain a variable and dataset table that you can open to see the list of available datastes and variables.
+- `cmda.ipynb` is a template notebook which provides a brief tutorial for using the CMDA GUI in Jupyter.
 
-### Postprocessing
-After the query is formed, the next step is downloading the data from the server into an `xarray.Dataset` object. 
-However, it's usually desirable to apply additonal postprocessing to the data which typically entails renaming fields (which can help make the plots nicer)
-and/or applying addtional analyses. 
+### Restarting your Server
 
-Example:
-```python    
-    def _postprocess_data(self, ds):
-        ds = ds.rename(index='EOF')
-        return ds
-```
+Restarting your server manually may be necessary to apply updates. To restart, go to **File > Hub Control Panel** and press the "Stop My Server" button twice, then press "Start My Server".
 
-### Plotting
-Override the `figure` accessor to determine how the plots should look. Use the `ds` accessor to access the underlying xarray Dataset. 
-The return value should be a panel compatible repr, such as `hvplot` objects (with Bokeh). 
-If the plot is a matplotlib figure, use a [Matplotlib Pane](https://panel.holoviz.org/reference/panes/Matplotlib.html)
+### Restarting your Kernel
 
-Example:
-```python
-    @property
-    def figure(self):
-        f1 = self.ds.patterns.hvplot.quadmesh('lon', 'lat', title='EOF',
-                                          widget_location='bottom',
-                                          projection=ccrs.PlateCarree(),
-                                          crs=ccrs.PlateCarree(), geo=True,
-                                          coastline=True)
-        f2 = self.ds.tser.hvplot.line(x='time', y='tser', title='PC',
-                                      widget_location='bottom')
-        return pn.Column(f1, f2)
-```
-### Custom Dataset Selectors
-The default `DatasetSelector` widget includes the basic options for providing the dataset name, variable, and pressure level. 
-To add GUI options specific to each dataset, you will need to create a subclass of `DatasetSelector` and then specify it in the `selector_cls` for your
-`Service`. For example, the `TimeSeriesService` allows for setting the lat/lon bounds individually for each dataset by doing the following:
+If the CMDA GUI is not responsive in the notebook, restart your kernel by going to **Kernel > Restart Kernel**. This can be necessary if you are idle for too long or you have internet connectivity issues.
 
-```python
-class SpatialSubsetter(param.Parameterized):
-    latitude_range = param.Range(default=(-90, 90), bounds=(-90, 90))
-    longitude_range = param.Range(default=(0, 360), bounds=(0, 360))
+### Additional Questions?
 
-class DatasetSubsetSelector(SpatialSubsetter, DatasetSelector):
-    pass
-```
+Contact Alex Goodman (alexander.goodman@jpl.nasa.gov)
