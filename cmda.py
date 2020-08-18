@@ -24,7 +24,9 @@ dset_dict = {cat: list(names[datasets.category == cat].unique()) for cat in cate
 seasons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 url_template = """
 ## Browser URL:
-{url}
+{api_url}
+## Plot URL:
+{plot_url}
 ## Plot:
 """
 
@@ -221,7 +223,7 @@ class Service(param.Parameterized):
             self.npresses += 1
         self.plot_button = pn.widgets.Button(name='Generate Data')
         self.plot_button.on_click(press)
-        self.browser_url = pn.pane.Markdown(url_template.format(url=''), width=800)
+        self.browser_url = pn.pane.Markdown(url_template.format(api_url='', plot_url=''), width=800)
         super().__init__(**params)
     
     @param.depends('nvars', watch=True)
@@ -277,8 +279,11 @@ class Service(param.Parameterized):
     
     def download_data(self):
         r1 = requests.get(self.url, params=self.query)
-        self.browser_url.object = url_template.format(url=r1.url)
-        url = r1.json()['dataUrl']
+        resp = r1.json()
+        plot_url = resp.get('url', '')
+        self.browser_url.object = url_template.format(api_url=r1.url, 
+                                                      plot_url=plot_url)
+        url = resp['dataUrl']
         r = requests.get(url)
         buf = BytesIO(r.content)
         return self._postprocess_data(xr.open_dataset(buf, decode_times=False))
