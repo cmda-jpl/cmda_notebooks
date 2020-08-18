@@ -201,6 +201,7 @@ class Service(param.Parameterized):
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
+    state = param.Integer(0, precedence=-1)
     host = 'http://api.jpl-cmda.org:8090'
     endpoint = '/'
     
@@ -237,7 +238,8 @@ class Service(param.Parameterized):
             self.dataset_selectors.pop(-1)
         for i in range(len(self.dataset_selectors), self.nvars):
             name = self.selector_names[i] if self.selector_names else f'Dataset {i+1}'
-            self.dataset_selectors.append(self.selector_cls(svc, name=name))
+            self.dataset_selectors.append(self.selector_cls(svc, name=name, 
+                                                            three_dim_only=self.three_dim_only))
         if hasattr(self.subsetter, 'time_range'):
             self.subsetter._update_time_ranges()
             
@@ -263,10 +265,11 @@ class Service(param.Parameterized):
         finally:
             self.plot_button.disabled = False
             self.plot_button.name = 'Generate Data'
+        self.state += 1
         return figure
  
-    @param.depends('npresses', watch=True)
-    def _save_state(self):
+    @param.depends('state', watch=True)
+    def _update_state(self):
         self.viewer._save_mimebundle()
 
     def _build_output(self, fig):
@@ -278,7 +281,7 @@ class Service(param.Parameterized):
                            self.purpose, self.plot_button, self.browser_url, 
                            fig)
         if self.viewer is not None:
-            self.viewer._panels[self.name] = output
+            self.viewer._panels[self.name] = self.browser_url
         return output
  
     def panel(self):
@@ -739,7 +742,7 @@ class MapViewService(Service):
         figures = []
         for i in range(1, self.nvars+1):
             v = self.v(i)
-            cmap = self.all_selectors[i].cmap
+            cmap = self.all_selectors[i-1].cmap
             f = self.ds.hvplot.quadmesh(f'longitude_{i}', f'latiitude_{i}', v,
                                          title=v, geo=True, projection=ccrs.PlateCarree(),
                                          crs=ccrs.PlateCarree(), coastline=True, cmap=cmap,
