@@ -942,9 +942,10 @@ class RemoteFileService(param.Parameterized):
     def ds(self):
         if not hasattr(self, '_cache'):
             self._cache = {}
-        if self.url not in self._cache:
-            self._cache[self.url] = self.download_data()
-        return self._cache[self.url]
+        key = f'{self.url}/{self.decode_times}'
+        if key not in self._cache:
+            self._cache[key] = self.download_data()
+        return self._cache[key]
 
     @param.depends('npresses')
     def xr(self):
