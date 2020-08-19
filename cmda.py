@@ -101,8 +101,7 @@ class DatasetSelector(param.Parameterized):
     def __init__(self, service, three_dim_only=False, **params):
         self.service = service
         self.three_dim_only = three_dim_only
-        if three_dim_only:
-            self._update_variable()
+        self._update_variable()
         super().__init__(**params)
     
     @param.depends('category', watch=True)
