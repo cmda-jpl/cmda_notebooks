@@ -993,9 +993,7 @@ class ServiceViewer:
     def _save_mimebundle(self):
         obj = pn.Tabs(*[(k, v) for k, v in self._panels.items()],
                       tabs_location='right')
-        bundle = obj._repr_mimebundle_()
-        with open('.cmda_data.json', 'w') as f:
-            json.dump(bundle, f)  
+        obj.save('.cmda_data.html')
 
     @property
     def service_names(self):
