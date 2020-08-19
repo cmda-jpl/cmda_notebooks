@@ -14,6 +14,7 @@ import xarray as xr
 import hvplot.xarray
 import hvplot.pandas
 import holoviews as hv
+from bokeh.resources import INLINE
 from holoviews import opts
 from fillna import replace_nans
 from holoviews.plotting.util import list_cmaps
@@ -475,17 +476,17 @@ class DifferencePlotService(Service):
         f1 = self.ds.hvplot.quadmesh('lon', 'lat', 'diff', title='diff',
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True,
+                                     width=800, rasterize=True,
                                      cmap=self.cmap1)
         f2 = self.ds.hvplot.quadmesh('lon', 'lat', v1, title=v1,
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True,
+                                     width=800, rasterize=True,
                                      cmap=self.cmap2)
         f3 = self.ds.hvplot.quadmesh('lon', 'lat', v2, title=v2,
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True,
+                                     width=800, rasterize=True,
                                      cmap=self.cmap2)
         return pn.Column(f1, f2, f3)
 
@@ -541,7 +542,7 @@ class EOFService(Service):
         f2 = self.ds.patterns.hvplot.quadmesh('lon', 'lat', title='EOF',
                                           widget_location='bottom',
                                           projection=ccrs.PlateCarree(), cmap=self.cmap,
-                                          crs=ccrs.PlateCarree(), geo=True,
+                                          crs=ccrs.PlateCarree(), geo=True, width=800,
                                           coastline=True, rasterize=True)
         f3 = self.ds.tser.hvplot.line(x='time', y='tser', title='PC',
                                       widget_location='bottom')
@@ -579,7 +580,7 @@ class JointEOFService(Service):
                                             f'lon{i}', f'lat{i}', title='EOF',
                                             widget_location='bottom', cmap=self.cmap,
                                             projection=ccrs.PlateCarree(),
-                                            crs=ccrs.PlateCarree(), geo=True,
+                                            crs=ccrs.PlateCarree(), geo=True, width=800,
                                             coastline=True, rasterize=True)
             ef2 = self.ds[f'amp{i}'].hvplot.line(x='time', y=f'amp{i}', title='PC',
                                                  widget_location='bottom')
@@ -607,7 +608,7 @@ class CorrelationMapService(Service):
                                             projection=ccrs.PlateCarree(),
                                             crs=ccrs.PlateCarree(), geo=True,
                                             coastline=True, width=800, cmap=self.cmap,
-                                            height=400, rasterize=True)
+                                            rasterize=True)
 
     @property
     def query(self):
@@ -711,7 +712,7 @@ class AnomalyService(Service):
         f2 = self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True,
+                                     width=800, rasterize=True,
                                      widget_location='bottom', cmap=self.cmap)
         return pn.Column(f1, f2)
     
@@ -750,7 +751,7 @@ class MapViewService(Service):
             return self.ds.hvplot.quadmesh('longitude', 'latitude', self.query['var1'],
                                             title=self.query['var1'], geo=True, cmap=cmap,
                                             projection=ccrs.PlateCarree(), crs=ccrs.PlateCarree(), 
-                                            coastline=True, width=800, height=400, rasterize=True)
+                                            coastline=True, width=800, rasterize=True)
         figures = []
         for i in range(1, self.nvars+1):
             v = self.v(i)
@@ -758,7 +759,7 @@ class MapViewService(Service):
             f = self.ds.hvplot.quadmesh(f'longitude_{i}', f'latiitude_{i}', v,
                                          title=v, geo=True, projection=ccrs.PlateCarree(),
                                          crs=ccrs.PlateCarree(), coastline=True, cmap=cmap,
-                                         width=800, height=400, rasterize=True)
+                                         width=800, rasterize=True)
             figures.append((v, f))
         return pn.Tabs(*figures)
     
@@ -910,7 +911,7 @@ class RegridService(Service):
         f2 = self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
                                      geo=True, projection=ccrs.PlateCarree(),
                                      crs=ccrs.PlateCarree(), coastline=True,
-                                     width=800, height=400, rasterize=True,
+                                     width=800, rasterize=True,
                                      widget_location='bottom', cmap=self.cmap)
         return pn.Column(f1, f2)
     
@@ -1003,7 +1004,7 @@ class ServiceViewer:
     def _save_mimebundle(self):
         obj = pn.Tabs(*[(k, v) for k, v in self._panels.items()],
                       tabs_location='right')
-        obj.save('.cmda_data.html')
+        obj.save('.cmda_data.html', resources='INLINE')
 
     @property
     def service_names(self):
