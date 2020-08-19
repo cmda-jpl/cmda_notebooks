@@ -1,6 +1,6 @@
 from io import BytesIO
 import traceback
-import json
+import os
 import warnings
 import cartopy.crs as ccrs
 import numpy as np
@@ -202,7 +202,7 @@ class Service(param.Parameterized):
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
     state = param.Integer(0, precedence=-1)
-    host = 'http://api.jpl-cmda.org:8090'
+    host = 'http://api.jpl-cmda.org'
     endpoint = '/'
     
     def __init__(self, viewer=None, **params):
@@ -228,6 +228,13 @@ class Service(param.Parameterized):
             self.npresses += 1
         self.plot_button = pn.widgets.Button(name='Generate Data', width=200)
         self.plot_button.on_click(press)
+        
+        def download():
+            buf = BytesIO(self.ds.to_netcdf())
+            buf.seek(0)
+            return buf
+        self.file_download = pn.widgets.FileDownload(callback=download, label='Download Data', 
+                                                     filename='data.nc', width=200)
         self.browser_url = pn.pane.Markdown(url_template.format(api_url='', plot_url=''), width=800)
         super().__init__(**params)
     
@@ -276,9 +283,10 @@ class Service(param.Parameterized):
         kwargs = {}
         if hasattr(self, 'widgets'):
             kwargs['widgets'] = self.widgets
+        buttons = pn.Row(self.plot_button, self.file_download)
         output = pn.Column(pn.Param(self.param, **kwargs),
                            self.select_dataset, self.subsetter,
-                           self.purpose, self.plot_button, self.browser_url, 
+                           self.purpose, buttons, self.browser_url, 
                            fig)
         if self.viewer is not None:
             self.viewer._panels[self.name] = self.browser_url
@@ -294,6 +302,7 @@ class Service(param.Parameterized):
         self.browser_url.object = url_template.format(api_url=r1.url, 
                                                       plot_url=plot_url)
         url = resp['dataUrl']
+        self.file_download.filename = os.path.basename(url)
         r = requests.get(url)
         buf = BytesIO(r.content)
         return self._postprocess_data(xr.open_dataset(buf, decode_times=self.decode_times))
