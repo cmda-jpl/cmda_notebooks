@@ -197,6 +197,7 @@ class Service(param.Parameterized):
     month_prefix = ''
     latlon_suf = True
     three_dim_only = False
+    decode_times = False
     ntargets = param.Integer(0, bounds=(0, 1), precedence=-1)
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
@@ -295,7 +296,7 @@ class Service(param.Parameterized):
         url = resp['dataUrl']
         r = requests.get(url)
         buf = BytesIO(r.content)
-        return self._postprocess_data(xr.open_dataset(buf, decode_times=False))
+        return self._postprocess_data(xr.open_dataset(buf, decode_times=self.decode_times))
 
     def v(self, number):
         model, variable = self.query[f'model{number}'], self.query[f'var{number}']
@@ -512,6 +513,7 @@ class RandomForestService(Service):
 
 
 class EOFService(Service):
+    decode_times = True
     selector_names = ['Data']
     nvars = param.Integer(1, precedence=-1)
     anomaly = param.Boolean(False, label='Use Anomaly')
@@ -519,8 +521,7 @@ class EOFService(Service):
     endpoint = '/svc/EOF'
     
     def _postprocess_data(self, ds):
-        times = gen_time_range(self.subsetter.start_time, self.subsetter.end_time)
-        ds = ds.rename(index='EOF').assign_coords(time=times)
+        ds = ds.rename(index='EOF')
         ds['varP'] *= 100
         return ds
         
@@ -625,11 +626,11 @@ class ConditionalPDFService(Service):
             x = self.ds.binsX.isel(x=[i, i+1]).values
             y = self.ds.binsY.isel(xc=[i, i]).values
             z = self.ds.pdf.isel(xc=i).values.reshape(-1, 1)
-            submesh = hv.QuadMesh((x, y, z))
+            submesh = hv.QuadMesh((x, y, z), vdims=['pdf'])
             meshes.append(submesh)
         mesh = hv.Overlay(meshes) * curve
-        return mesh.opts(opts.QuadMesh(colorbar=True, width=800, height=400,
-                                       tools=['hover'], cmap=self.cmap))
+        return mesh.opts(opts.QuadMesh(colorbar=True, width=800, height=400, 
+                                       xlabel=v1, ylabel=v2, tools=['hover'], cmap=self.cmap))
 
     @property
     def query(self):
@@ -885,6 +886,32 @@ class VerticalProfileService(Service):
                 .opts(invert_yaxis=True))
 
 
+class RegridService(Service):
+    dlat, dlon = param.Parameter(1, label='dlon'), param.Parameter(1, label='dlon')
+    yscale = param.ObjectSelector(objects=['linear', 'log'], label='Y Axis Scale', precedence=0.1)
+    cmap = param.ObjectSelector(objects=cmaps, default='viridis', label='Colormap', precedence=0.1)
+    endpoint = '/svc/regridAndDownload'
+    
+    @property
+    def figure(self):
+        v = self.query['var1']
+        logy = self.yscale == 'log'
+        area_mean = self.ds.weighted(np.cos(np.deg2rad(self.ds.lat))).mean(('lon', 'lat'))
+        f1 = area_mean.hvplot.line(x='time', y=v, width=800, height=400, legend='bottom', logy=logy)
+        f2 = self.ds.hvplot.quadmesh('lon', 'lat', v, title=f'{v} Anomaly',
+                                     geo=True, projection=ccrs.PlateCarree(),
+                                     crs=ccrs.PlateCarree(), coastline=True,
+                                     width=800, height=400, rasterize=True,
+                                     widget_location='bottom', cmap=self.cmap)
+        return pn.Column(f1, f2)
+    
+    @property
+    def query(self):
+        query = dict(**super().query)
+        query.update(dlat=self.dlat, dlon=self.dlon)
+        return query
+    
+    
 class RemoteFileService(param.Parameterized):
     url = param.String('', label='NetCDF File URL')
     decode_times = param.Boolean(False, label='Decode Times')
@@ -949,6 +976,7 @@ class ServiceViewer:
             conditional_sampling=ConditionalSamplingService(name='Conditional Sampling'),
             zonal_mean=ZonalMeanService(name='Zonal Mean'),
             vertical_profile=VerticalProfileService(name='Vertical Profile'),
+            regrid=RegridService(name='Regrid'),
             open_url=RemoteFileService(name='Open File URL')
         )
         for svc in self.svc.values():
