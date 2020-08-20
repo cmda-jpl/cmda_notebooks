@@ -824,8 +824,8 @@ NASA/AIRS,Observation,taStderr,200209,201105,,,,,
 NASA/MLS,Observation,taStderr,200408,201012,,,,,
 NASA/AMSRE,Observation,tosNobs,200206,201012,,,,,
 NASA/AMSRE,Observation,tosStderr,200206,201012,,,,,
-NASA/GRACE,Observation,zl,200204,201701,,Equivalent Water Height Over Land,,2.0,cm
-NASA/GRACE,Observation,zo,200208,201612,,Equivalent Water Height Over Ocean,,2.0,cm
+NASA/GRACE,Observation,zl,200204,201506,,Equivalent Water Height Over Land,,2.0,cm
+NASA/GRACE,Observation,zo,200208,201506,,Equivalent Water Height Over Ocean,,2.0,cm
 NASA/MODIS,Observation,cltNobs,200003,201109,,,,,
 NASA/MODIS,Observation,cltStddev,200003,201109,,,,,
 NASA/MODIS,Observation,cltday,200003,201512,,Daytime Total Cloud Area Fraction,,2.0,1
