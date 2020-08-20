@@ -300,8 +300,8 @@ class Service(param.Parameterized):
         r1 = requests.get(self.url, params=self.query)
         resp = r1.json()
         plot_url = resp.get('url', '')
-        self.browser_url.object = url_template.format(api_url=r1.url, 
-                                                      plot_url=plot_url)
+        self.browser_url.object = url_template.format(api_url=f'<{r1.url}>', 
+                                                      plot_url=f'<{plot_url}>')
         url = resp['dataUrl']
         self.file_download.filename = os.path.basename(url)
         r = requests.get(url)
