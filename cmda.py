@@ -299,8 +299,10 @@ class Service(param.Parameterized):
     def download_data(self):
         r1 = requests.get(self.url, params=self.query)
         resp = r1.json()
+        endpoint = self.endpoint[self.nvars-1] if isinstance(self.endpoint, list) else self.endpoint
+        api_url = r1.url.replace(endpoint, '/' + self.html_name)
         plot_url = resp.get('url', '')
-        self.browser_url.object = url_template.format(api_url=f'<{r1.url}>', 
+        self.browser_url.object = url_template.format(api_url=f'<{api_url}>', 
                                                       plot_url=f'<{plot_url}>')
         url = resp['dataUrl']
         self.file_download.filename = os.path.basename(url)
@@ -327,6 +329,14 @@ class Service(param.Parameterized):
             return self.host + self.endpoint[self.nvars-1]
         else:
             return self.host + self.endpoint
+    
+    @property
+    def html_name(self):
+        if hasattr(self, 'html_base'):
+            name = self.html_base
+        else:
+            name = os.path.basename(self.endpoint)
+        return name + '.html'
     
     @property
     def figure(self):
@@ -390,6 +400,7 @@ class TimeSeriesService(Service):
     selector_cls = DatasetSubsetSelector
     subsetter_cls = TemporalSubsetter
     endpoint = '/svc/timeSeries'
+    html_base = 'timeSeries8'
     latlon_prefix = 'v'
     latlon_suf = False
     
@@ -401,7 +412,7 @@ class TimeSeriesService(Service):
                 .assign_coords(Dataset=datasets, time=times))
         ds['time'] = times
         return ds
-        
+    
     @property
     def figure(self):
         ds = self.ds.copy()
@@ -459,6 +470,7 @@ class DifferencePlotService(Service):
     selector_names = ['Variable 1', 'Variable 2']
     nvars = param.Integer(2, precedence=-1)
     endpoint = '/svc/diffPlot2V'
+    html_base = 'diffPlot2Vars'
     cmap1 = param.ObjectSelector(objects=cmaps, default='coolwarm', 
                                  label='Difference Colormap', precedence=0.1)
     cmap2 = param.ObjectSelector(objects=cmaps, default='viridis', 
@@ -561,6 +573,7 @@ class JointEOFService(Service):
     nvars = param.Integer(2, precedence=-1)
     cmap = param.ObjectSelector(objects=cmaps, default='coolwarm', label='Colormap', precedence=0.1)
     endpoint = '/svc/JointEOF'
+    html_base = 'jointEOF'
     
     def _postprocess_data(self, ds):
         times = gen_time_range(self.subsetter.start_time, self.subsetter.end_time)
@@ -788,6 +801,12 @@ class ConditionalSamplingService(Service):
     endpoint = ['/svc/conditionalSampling', '/svc/conditionalSampling2Var']
 
     @property
+    def html_base(self):
+        if self.nvars == 2:
+            return 'conditionalSampling2Var'
+        return 'conditionalSampling'
+    
+    @property
     def figure(self):
         v1, v2 = self.query['var1'], self.query['var2'] + 'Bin'
         logx = self.xscale == 'log'
@@ -843,6 +862,7 @@ class ZonalMeanService(Service):
     month_prefix = 'v'
     latlon_prefix = 'v'
     endpoint = '/svc/zonalMean'
+    html_base = 'zonalMean8'
 
     def _postprocess_data(self, ds):
         if self.nvars < 2:
@@ -885,6 +905,7 @@ class VerticalProfileService(Service):
     subsetter_cls = SpatialSeasonalSubsetter
     three_dim_only = True
     endpoint = '/svc/threeDimVerticalProfile'
+    html_base = 'threeDimVarVertical'
     
     @property
     def figure(self):
