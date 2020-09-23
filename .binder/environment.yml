@@ -12,3 +12,4 @@ dependencies:
   - requests
   - geoviews
   - panel
+  - beautifulsoup4
