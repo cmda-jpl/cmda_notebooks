@@ -296,14 +296,17 @@ class Service(param.Parameterized):
     def panel(self):
         return self._build_output(self.plot)
     
-    def download_data(self):
-        r1 = requests.get(self.url, params=self.query)
+    def download_data(self, url=None):
+        if url:
+            r1 = requests.get(url)
+        else:
+            r1 = requests.get(self.url, params=self.query)
         resp = r1.json()
         endpoint = self.endpoint[self.nvars-1] if isinstance(self.endpoint, list) else self.endpoint
-        api_url = r1.url.replace(endpoint, '/' + self.html_name)
-        plot_url = resp.get('url', '')
-        self.browser_url.object = url_template.format(api_url=f'<{api_url}>', 
-                                                      plot_url=f'<{plot_url}>')
+        self.api_url = r1.url.replace(endpoint, '/' + self.html_name)
+        self.plot_url = resp.get('url', '')
+        self.browser_url.object = url_template.format(api_url=f'<{r1.url}>', 
+                                                      plot_url=f'<{self.plot_url}>')
         url = resp['dataUrl']
         self.file_download.filename = os.path.basename(url)
         r = requests.get(url)
@@ -955,8 +958,12 @@ class RemoteFileService(param.Parameterized):
         self.button.on_click(press)
         super().__init__(**params)
     
-    def download_data(self):
-        r = requests.get(self.url)
+    def download_data(self, url=None):
+        if url:
+            r1 = requests.get(url)
+            r = requests.get(r1.json()['dataUrl'])
+        else:
+            r = requests.get(self.url)
         buf = BytesIO(r.content)
         return xr.open_dataset(buf, decode_times=self.decode_times)
     
@@ -991,6 +998,21 @@ class RemoteFileService(param.Parameterized):
         return pn.Column(pn.Param(self.param, widgets=widgets), 
                          self.button, self.xr, height=1000)
     
+    def __call__(self, url):
+        base_url = url.split('?')[0]
+        url_endpoint = base_url.replace(Service.host, '')
+        matched_svc = self
+        for svc in self.viewer.svc.values():
+            if svc is self:
+                continue
+            endpoints = svc.endpoint
+            if not isinstance(endpoints, list):
+                endpoints = [endpoints]
+            for endpoint in endpoints:
+                if endpoint == url_endpoint:
+                    matched_svc = svc
+        return matched_svc.download_data(url=url)
+                    
     
 class ServiceViewer:
     def __init__(self):
