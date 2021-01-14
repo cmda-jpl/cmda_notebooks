@@ -208,6 +208,7 @@ class Service(param.Parameterized):
     
     def __init__(self, viewer=None, **params):
         self.viewer = viewer
+        self._direct_query = None
         t_svc = None if issubclass(self.target_selector_cls, TemporalSubsetter) else self
         svc = None if issubclass(self.selector_cls, TemporalSubsetter) else self
         self.target_selector = self.target_selector_cls(t_svc, three_dim_only=self.three_dim_only, 
@@ -299,8 +300,10 @@ class Service(param.Parameterized):
     def download_data(self, url=None):
         if url:
             r1 = requests.get(url)
+            self._direct_query = {k.split('=')[0]: k.split('=')[1] for k in url.split('?')[1].split('&')}
         else:
             r1 = requests.get(self.url, params=self.query)
+            self._direct_query = None
         resp = r1.json()
         endpoint = self.endpoint[self.nvars-1] if isinstance(self.endpoint, list) else self.endpoint
         self.api_url = r1.url.replace(endpoint, '/' + self.html_name)
@@ -356,6 +359,8 @@ class Service(param.Parameterized):
         
     @property
     def query(self):
+        if self._direct_query is not None:
+            return self._direct_query
         query = dict(purpose=self.purpose.value)
         if not isinstance(self.dataset_selectors[0], SpatialSubsetter):
             query.update(latS=self.subsetter.latitude_range[0],
@@ -408,8 +413,9 @@ class TimeSeriesService(Service):
     latlon_suf = False
     
     def _postprocess_data(self, ds):
-        datasets = [self.v(i) for i in range(1, self.nvars+1)]
-        times = gen_time_range(self.subsetter.start_time, self.subsetter.end_time)
+        datasets = [self.v(i) for i in range(1, int(self.query['nVar'])+1)]
+        start_time, end_time = self.query['timeS'], self.query['timeE']
+        times = gen_time_range(start_time+'01', end_time+'01')
         ds = (ds.rename(varIdx='Dataset', monthIdx='time')
                 .rename({self.query['var1']: 'variable'})
                 .assign_coords(Dataset=datasets, time=times))
@@ -435,7 +441,8 @@ class TimeSeriesService(Service):
     @property
     def query(self):
         query = dict(**super().query)
-        query['nVar'] = self.nvars
+        if 'nVar' not in query:
+            query['nVar'] = self.nvars
         return query
 
 class ScatterHistService(Service):
@@ -533,7 +540,8 @@ class RandomForestService(Service):
     @property
     def query(self):
         query = dict(**super().query)
-        query['nVar'] = self.nvars
+        if 'nVar' not in query:
+            query['nVar'] = self.nvars
         return query
 
 
@@ -783,7 +791,8 @@ class MapViewService(Service):
     def query(self):
         query = dict(**super().query)
         query['scale'] = 0
-        query['nVar'] = self.nvars - 1
+        if 'nVar' not in query:
+            query['nVar'] = self.nvars - 1
         return query
 
     
@@ -900,7 +909,8 @@ class ZonalMeanService(Service):
     def query(self):
         query = dict(**super().query)
         query['scale'] = 0
-        query['nVar'] = self.nvars - 1
+        if 'nVar' not in query:
+            query['nVar'] = self.nvars - 1
         return query
 
     
