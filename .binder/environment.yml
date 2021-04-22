@@ -13,4 +13,4 @@ dependencies:
   - geoviews
   - panel
   - beautifulsoup4
-  -jupyterlab
+  - jupyterlab
