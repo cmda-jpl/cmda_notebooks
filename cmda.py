@@ -203,10 +203,10 @@ class Service(param.Parameterized):
     nvars = param.Integer(1, bounds=(1, 6), label='Number Of Variables')
     npresses = param.Integer(0, precedence=-1)
     state = param.Integer(0, precedence=-1)
-    host = 'http://api.jpl-cmda.org'
     endpoint = '/'
     
-    def __init__(self, viewer=None, **params):
+    def __init__(self, viewer=None, host='https://api.jpl-cmda.org', **params):
+        self.host = host
         self.viewer = viewer
         self._direct_query = None
         t_svc = None if issubclass(self.target_selector_cls, TemporalSubsetter) else self
@@ -962,6 +962,7 @@ class RemoteFileService(param.Parameterized):
     npresses = param.Integer(0, precedence=-1)
     
     def __init__(self, **params):
+        self.host = 'https://jpl-cmda.org'
         def press(event):
             self.npresses += 1
         self.button = pn.widgets.Button(name='Load Data', width=200)
@@ -1009,10 +1010,10 @@ class RemoteFileService(param.Parameterized):
                          self.button, self.xr, height=1000)
     
     def __call__(self, url):
-        base_url = url.split('?')[0]
-        url_endpoint = base_url.replace(Service.host, '')
         matched_svc = self
         for svc in self.viewer.svc.values():
+            base_url = url.split('?')[0]
+            url_endpoint = base_url.replace(svc.host, '')
             if svc is self:
                 continue
             endpoints = svc.endpoint
