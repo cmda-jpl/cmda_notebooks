@@ -6,7 +6,7 @@
 ## JPL Climate Summer School (CCS) JupyterHub server
 These notebooks are currently deployed at: 
 
-http://jpl-cmda.org
+http://hub.jpl-cmda.org
 
 ## Quick Tips for CCS students
 
@@ -19,11 +19,13 @@ Upon logging into your server, you should find the following two directories:
 
 ### Workspace Overview 
 
-![img](https://i.imgur.com/XsPdZt3.png)
+![img](https://puu.sh/I4V5S/5c93b24ff4.png)
 
 - `cmda.py` and `fillna.py` contains the main library code. Do not edit these!
 - `datasets.csv` and `variables.csv` contain a variable and dataset table that you can open to see the list of available datasets and variables.
 - `cmda.ipynb` is a template notebook which provides a brief tutorial for using the CMDA GUI in Jupyter.
+- `example1.ipynb` is a template notebook which provides a brief tutorial for using the CMDA GUI in Jupyter.
+- `Topic6_RCMES` Contains notebooks for topic 6.
 
 ### Restarting your Server
 
