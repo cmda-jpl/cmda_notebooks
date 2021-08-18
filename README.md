@@ -24,7 +24,7 @@ Upon logging into your server, you should find the following two directories:
 - `cmda.py` and `fillna.py` contains the main library code. Do not edit these!
 - `datasets.csv` and `variables.csv` contain a variable and dataset table that you can open to see the list of available datasets and variables.
 - `cmda.ipynb` is a template notebook which provides a brief tutorial for using the CMDA GUI in Jupyter.
-- `example1.ipynb` is a template notebook which provides a brief tutorial for using the CMDA GUI in Jupyter.
+- `example1.ipynb` is a tutorial notebook showing how to use the CMDA universal analysis tool in Jupyter..
 - `Topic6_RCMES` Contains notebooks for topic 6.
 
 ### Restarting your Server
