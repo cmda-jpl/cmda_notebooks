@@ -142,7 +142,7 @@ jobs:
 
   deploy:
     machine:
-      image: circleci/classic:201711-01
+      image: circleci/classic:latest
     working_directory: /tmp/src
     steps:
       - attach_workspace:
