@@ -4,14 +4,14 @@ channels:
   - conda-forge
 dependencies:
   - python=3.7
-  - xarray
+  - xarray=0.17.0
   - h5netcdf
   - pandas=1.0.5
-  - matplotlib-base
-  - cartopy
-  - hvplot
+  - matplotlib-base=3.4.1
+  - cartopy=0.18.0
+  - hvplot=0.7.1
   - requests
-  - geoviews
-  - panel
-  - beautifulsoup4
-  - jupyterlab
+  - geoviews=1.9.1
+  - panel=0.11.3
+  - beautifulsoup4=4.9.3
+  - jupyterlab=3.0.7
