@@ -17,3 +17,4 @@ dependencies:
   - jupyterlab=3.0.7
   - numpy=1.20.2
   - param=1.10.1
+  - holoviews=1.4.3
