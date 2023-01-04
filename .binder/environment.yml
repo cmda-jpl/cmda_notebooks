@@ -10,6 +10,8 @@ dependencies:
   - matplotlib-base=3.4.1
   - cartopy=0.18.0
   - hvplot=0.7.1
+  - rasterio
+  - rioxarray
   - requests
   - geoviews=1.9.1
   - panel=0.11.3
