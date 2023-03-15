@@ -6,6 +6,10 @@ dependencies:
   - python=3.7
   - xarray=0.17.0
   - h5netcdf
+  - gcsfs
+  - s3fs
+  - intake-esm
+  - bcdp
   - pandas=1.0.5
   - matplotlib-base=3.4.1
   - cartopy=0.18.0
