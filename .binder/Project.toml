@@ -1,5 +1,5 @@
 [deps]
-Netcdf = "30363a11-5582-574a-97bb-aa9a979735b9"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [compat]
