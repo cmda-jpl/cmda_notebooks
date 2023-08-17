@@ -1,6 +1,0 @@
-install.packages("shiny")
-install.packages("shinydashboard")
-install.packages("raster")
-install.packages("terra")
-install.packages("ggplot2")
-install.packages("ncdf4")

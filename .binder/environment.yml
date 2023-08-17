@@ -9,6 +9,7 @@ dependencies:
   - gcsfs
   - s3fs
   - intake-esm
+  - r-irkernel
   - bcdp
   - statsmodels
   - pandas=1.0.5
