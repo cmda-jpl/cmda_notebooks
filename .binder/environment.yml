@@ -12,10 +12,9 @@ dependencies:
   - palettable
   - cmocean
   - geopandas
-  - pyogrio
   - statsmodels
   - matplotlib-base
   - cartopy
-  - rasterio
-  - rioxarray
   - requests
+  - numba
+  - sqlite>=3.46.0
