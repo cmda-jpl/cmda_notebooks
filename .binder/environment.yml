@@ -5,6 +5,8 @@ dependencies:
   - python=3.10
   - netCDF4
   - xarray
+  - rioxarray
+  - tqdm
   - h5netcdf
   - gcsfs
   - s3fs
