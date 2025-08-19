@@ -5,6 +5,7 @@ dependencies:
   - python=3.10
   - netCDF4
   - xarray
+  - dask
   - rioxarray
   - tqdm
   - h5netcdf
