@@ -138,7 +138,7 @@ jobs:
   update_cache:
     machine:
       image: ubuntu-2204:2024.01.02
-      resource_class: medium
+      resource_class: large
     working_directory: /tmp/src
     steps:
       - attach_workspace:
@@ -151,7 +151,7 @@ jobs:
   deploy:
     machine:
       image: ubuntu-2204:2024.01.02
-      resource_class: medium
+      resource_class: large
     working_directory: /tmp/src
     steps:
       - attach_workspace:
