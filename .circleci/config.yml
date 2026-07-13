@@ -30,6 +30,7 @@ jobs:
   build:
     environment:
       - TZ: "/usr/share/zoneinfo/America/Los_Angeles"
+      - GITHUB_TOKEN: ${GITHUB_TOKEN}
     docker:
       - image: docker:18.01.0-ce-git
     working_directory: /tmp/src
@@ -44,7 +45,14 @@ jobs:
             - /tmp/cache/container.tar.gz
       - restore_cache:
           key: dependency-cache-repo2docker
-      - checkout
+      - run:
+          name: Clone repository via HTTPS
+          command: |
+            git clone https://${GITHUB_TOKEN}@github.com/cmda-jpl/cmda_notebooks.git .
+      - run:
+          name: Configure git
+          command: |
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
       - run:
           name: Git submodules
           command: git submodule update --init --recursive
