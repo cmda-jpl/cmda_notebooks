@@ -137,8 +137,8 @@ jobs:
 
   update_cache:
     machine:
-      # Ubuntu 14.04 with Docker 17.10.0-ce
-      image: ubuntu-2004:202201-02
+      image: ubuntu-2204:2024.01.02
+      resource_class: medium
     working_directory: /tmp/src
     steps:
       - attach_workspace:
@@ -150,7 +150,8 @@ jobs:
 
   deploy:
     machine:
-      image: ubuntu-2004:202201-02
+      image: ubuntu-2204:2024.01.02
+      resource_class: medium
     working_directory: /tmp/src
     steps:
       - attach_workspace:
