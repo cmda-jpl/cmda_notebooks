@@ -6,7 +6,7 @@ dependencies:
   - netCDF4
   - xarray
   - dask
-  - pytorch
+  - pytorch-cpu
   - gpytorch
   - rioxarray
   - tqdm
